@@ -1,0 +1,13 @@
+# IMP-003: ruff configuration. Baseline count tracked in docs/reviews/ruff-baseline.txt;
+# the pre-commit gate fails only when findings exceed that baseline.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# E501 handled via line-length setting; TUI markup strings are legitimately long.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# Test fixtures intentionally keep broad patterns / long inline data.
+"tests/*" = ["B011"]

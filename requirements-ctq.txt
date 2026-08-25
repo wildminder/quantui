@@ -1,0 +1,39 @@
+# requirements-ctq.txt
+# ---------------------------------------------------------------------------
+# Dependencies for the SEPARATE ComfyUI / convert_to_quant (ctq) worker env.
+#
+# IMPORTANT: install these into a DIFFERENT python interpreter than the one running
+# this TUI (or the Unsloth GGUF env). Point the TUI's "Worker Python (ctq)" field
+# at that interpreter. `convert-to-quant` does NOT pull torch -- you must install a
+# matching CUDA torch yourself.
+#
+# The TUI app itself only needs `textual` (see requirements.txt) and spawns this
+# worker as a subprocess; it never imports convert_to_quant directly.
+# ---------------------------------------------------------------------------
+
+# Base (all ctq formats):
+convert-to-quant          # does NOT pull torch -- install CUDA torch manually
+
+# Minimum runtime for FP8 / INT8:
+#   Python >= 3.10,  PyTorch >= 2.8,  CUDA >= 12.8
+#
+# INT8 kernels additionally need Triton:
+#   triton            (Linux native)  /  triton-windows  (Windows)
+#
+# NVFP4 / MXFP8 (Blackwell) additionally need:
+#   Python >= 3.12,  PyTorch >= 2.10,  CUDA >= 13.0,  comfy-kitchen
+
+# ---------------------------------------------------------------------------
+# HuggingFace SHARDED-FOLDER input (UX improvement)
+#
+# A sharded input is a folder containing `model.safetensors.index.json` plus
+# `model-0000N-of-0000M.safetensors` shards. The worker DOES NOT merge them:
+# it quantizes each shard with IDENTICAL flags (looping quantize() per shard),
+# then copies the original `model.safetensors.index.json` UNCHANGED and copies
+# the non-weight sidecar files (config.json, tokenizer*, etc.) verbatim.
+#
+# Because the index json + tensor names are preserved, the sharded output loads
+# exactly like the source and is mathematically identical to merge-then-quant.
+# The sharded OUTPUT is a DIRECTORY holding the quantized shards + index json +
+# sidecars. Do NOT pass a .safetensors filename as the sharded output.
+# ---------------------------------------------------------------------------

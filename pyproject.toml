@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unsloth-quant-tui"
+version = "0.2.1"
+description = "Terminal UI for multi-family model quantization (Unsloth GGUF + ComfyUI convert_to_quant)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "unsloth-quant-tui contributors" }]
+dependencies = [
+    "textual>=0.78.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+torch-test = [
+    "torch",
+    "safetensors",
+    "numpy",
+]
+
+[project.scripts]
+quantui = "quantui.__main__:main"
+
+[tool.setuptools]
+packages = ["quantui"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
