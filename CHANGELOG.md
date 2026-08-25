@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is SemVer.
 
+## [0.3.1] - 2026-08-25
+
+### Fixed
+- CPU utilization during quantization diagnosed (see
+  `docs/reports/2026-08-25-cpu-utilization-root-cause.md`): the ~4% CPU usage is
+  inherent to the learned-rounding optimizer path (convrot without --simple) --
+  a GPU-latency-bound loop with one host sync per iteration, not a torch
+  threading misconfiguration.
+
+### Added
+- `worker_ctq --num_iter` / `--num-iter`: passthrough of the learned-rounding
+  iteration count (ctq default 4000). Lowering it (500-1000) is the primary
+  speed lever for convrot runs; suppressed when `--simple` is set.
+- UI: "Learned-rounding iterations per tensor" input in the ComfyUI Advanced
+  collapsible (`#ctq_num_iter`), persisted in profiles.
+- Worker subprocesses inherit OMP/MKL/OPENBLAS thread-pool env vars set to the
+  full logical core count unless already set by the user (benefits CPU-device
+  runs; no effect on GPU-bound loops).
+
 ## [0.1.1] - 2026-08-25
 
 ## [0.1.2] - 2026-08-25
