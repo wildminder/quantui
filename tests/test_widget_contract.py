@@ -27,7 +27,7 @@ async def test_conditional_ctq_widgets_queryable_after_visibility_refresh():
     a = appmod.QuantApp()
     async with a.run_test():
         a.refresh_ctq_visibility()
-        for wid in ("#ctq_scaling_mode", "#convrot_group_size", "#block_size",
+        for wid in ("#scaling_mode", "#convrot", "#convrot_group_size", "#block_size",
                     "#heur", "#manual_seed"):
             assert a.query_one(wid) is not None, f"missing conditional widget {wid}"
 

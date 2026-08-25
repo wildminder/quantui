@@ -17,7 +17,7 @@ mirroring the GGUF worker's log/fail contract.
 Usage:
     python worker_ctq.py -i model.safetensors -o model-Q8.safetensors --int8 \\
         --scaling_mode block --comfy_quant --save_quant_metadata
-    python worker_ctq.py -i model_folder -o model-int8_convrot-gs256.safetensors --flux2
+    python worker_ctq.py -i model_folder -o model-int8-row-convrot-gs256.safetensors --flux2
 """
 
 import argparse

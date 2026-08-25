@@ -17,7 +17,8 @@ import threading
 import time
 
 import pytest
-from textual.widgets import Button, Input, Label, RadioButton, RadioSet, RichLog, Select
+from textual.widgets import (Button, Checkbox, Input, Label, RadioButton, RadioSet,
+                             RichLog, Select)
 
 from quantui import app as appmod
 from quantui import run_config as rc_mod
@@ -141,58 +142,78 @@ async def test_format_visibility():
     a = appmod.QuantApp()
     async with a.run_test():
         switch_family(a, Family.COMFY)
-        a.query_one("#ctq_format", Select).value = "int8_convrot"
+        # Unified int8 + block scaling (default) -> scaling visible, convrot hidden
+        a.query_one("#ctq_format", Select).value = "int8"
         a.refresh_ctq_visibility()
-        assert a.query_one("#convrot_group_size").display is True
+        assert a.query_one("#scaling_mode").display is True
+        assert a.query_one("#block_size").display is True
+        assert a.query_one("#convrot").display is False
+        assert a.query_one("#convrot_group_size").display is False
+        # fp8 -> all INT8 options hidden again
         a.query_one("#ctq_format", Select).value = "fp8_e4m3"
         a.refresh_ctq_visibility()
-        assert a.query_one("#convrot_group_size").display is False
-        a.query_one("#ctq_format", Select).value = "int8_block"
+        for wid in ("#scaling_mode", "#block_size", "#convrot", "#convrot_group_size"):
+            assert a.query_one(wid).display is False, wid
+
+
+async def test_int8_scaling_switch_reveals_only_valid_options():
+    # Ambiguity fix: switching scaling mode shows ONLY the options valid for it.
+    a = appmod.QuantApp()
+    async with a.run_test():
+        switch_family(a, Family.COMFY)
+        a.query_one("#ctq_format", Select).value = "int8"
+        # tensor: neither block_size nor convrot widgets apply
+        a.query_one("#scaling_mode", Select).value = "tensor"
         a.refresh_ctq_visibility()
-        # scaling mode visible for int8 formats, convrot only for int8_convrot
-        assert a.query_one("#ctq_scaling_mode").display is True
+        assert a.query_one("#block_size").display is False
+        assert a.query_one("#convrot").display is False
+        assert a.query_one("#convrot_group_size").display is False
+        # row: convrot appears; group size only after ticking the checkbox
+        a.query_one("#scaling_mode", Select).value = "row"
+        a.refresh_ctq_visibility()
+        assert a.query_one("#convrot").display is True
+        assert a.query_one("#convrot_group_size").display is False
+        assert a.query_one("#block_size").display is False
+        a.query_one("#convrot", Checkbox).value = True
+        a.refresh_ctq_visibility()
+        assert a.query_one("#convrot_group_size").display is True
+        # back to block: block_size reappears, convrot widgets vanish
+        a.query_one("#scaling_mode", Select).value = "block"
+        a.refresh_ctq_visibility()
+        assert a.query_one("#block_size").display is True
+        assert a.query_one("#convrot").display is False
         assert a.query_one("#convrot_group_size").display is False
 
 
-async def test_int8_block_exposes_block_size_heur_manual_seed():
-    # UI-exposure (Msg 4): selecting INT8 blockwise must reveal block_size / heur /
-    # manual_seed widgets; the default fp8_e4m3 format must keep them hidden.
+async def test_int8_exposes_heur_manual_seed_exclude_dtype():
+    # UI-exposure (Msg 4, updated): selecting INT8 must reveal heur / manual_seed /
+    # exclude_layers / output_dtype; the default fp8_e4m3 format keeps them hidden.
     a = appmod.QuantApp()
     async with a.run_test():
         switch_family(a, Family.COMFY)
         # default format fp8_e4m3 -> all INT8-specific options hidden
-        for wid in ["#block_size", "#block_size_label", "#heur", "#heur_label",
-                    "#manual_seed", "#manual_seed_label", "#convrot_group_size"]:
+        for wid in ["#heur", "#heur_label", "#manual_seed", "#manual_seed_label",
+                    "#exclude_layers", "#output_dtype"]:
             assert a.query_one(wid).display is False, wid
-        # switch to int8_block -> block_size + heur + manual_seed become visible
-        a.query_one("#ctq_format", Select).value = "int8_block"
+        # switch to int8 (default block scaling) -> shared options become visible
+        a.query_one("#ctq_format", Select).value = "int8"
         a.refresh_ctq_visibility()
-        for wid in ["#block_size", "#block_size_label", "#heur", "#heur_label",
-                    "#manual_seed", "#manual_seed_label"]:
+        for wid in ["#heur", "#heur_label", "#manual_seed", "#manual_seed_label",
+                    "#exclude_layers", "#output_dtype"]:
             assert a.query_one(wid).display is True, wid
-        # convrot only applies to int8_convrot -> hidden for int8_block
-        assert a.query_one("#convrot_group_size").display is False
 
 
-async def test_int8_convrot_exposes_convrot_heur_manual_seed():
-    a = appmod.QuantApp()
-    async with a.run_test():
-        switch_family(a, Family.COMFY)
-        a.query_one("#ctq_format", Select).value = "int8_convrot"
-        a.refresh_ctq_visibility()
-        assert a.query_one("#convrot_group_size").display is True
-        for wid in ["#heur", "#heur_label", "#manual_seed", "#manual_seed_label"]:
-            assert a.query_one(wid).display is True, wid
-        # block_size is blockwise-only -> hidden for int8_convrot
-        assert a.query_one("#block_size").display is False
-
-async def test_preset_sets_format():
+async def test_preset_sets_format_and_options():
     a = appmod.QuantApp()
     async with a.run_test():
         switch_family(a, Family.COMFY)
         a.query_one("#ctq_preset", Select).value = "flux2"
         a.on_select_changed(Select.Changed(a.query_one("#ctq_preset", Select), "flux2"))
-        assert a.query_one("#ctq_format", Select).value == "int8_convrot"
+        assert a.query_one("#ctq_format", Select).value == "int8"
+        # flux2 pins row scaling + ConvRot on (former int8_convrot behavior).
+        assert a.query_one("#scaling_mode", Select).value == "row"
+        assert a.query_one("#convrot", Checkbox).value is True
+        assert a.query_one("#convrot_group_size").display is True
 
 # --------------------------------------------------------------------------- #
 # C4: validate + auto_suggest_output branching
@@ -261,8 +282,11 @@ async def test_comfy_run_builds_cmd_and_streams(fake_popen, tmp_path):
         m = tmp_path / "model.safetensors"
         m.write_text("x")
         a.query_one("#ctq_input", Input).value = str(m)
-        a.query_one("#ctq_output", Input).value = str(tmp_path / "model-fp8_e4m3.safetensors")
-        a.query_one("#ctq_format", Select).value = "int8_convrot"
+        a.query_one("#ctq_output", Input).value = str(tmp_path / "model-int8.safetensors")
+        a.query_one("#ctq_format", Select).value = "int8"
+        a.query_one("#scaling_mode", Select).value = "row"
+        a.query_one("#convrot", Checkbox).value = True
+        a.refresh_ctq_visibility()
         a.query_one("#ctq_preset", Select).value = "flux2"
         a.query_one("#pybin_ctq", Input).value = sys.executable
         logs, statuses = attach_recorder(a)
@@ -296,7 +320,10 @@ async def test_capability_badge_nonblocking(tmp_path, monkeypatch):
         monkeypatch.setattr(appmod.capabilities, "probe_worker_env", lambda *a, **k: fake_report)
 
         a.query_one("#pybin_ctq", Input).value = sys.executable
-        a.query_one("#ctq_format", Select).value = "int8_convrot"
+        # Unified INT8 with ConvRot on -> Triton advisory must fire (dynamic need).
+        a.query_one("#ctq_format", Select).value = "int8"
+        a.query_one("#scaling_mode", Select).value = "row"
+        a.query_one("#convrot", Checkbox).value = True
         a.refresh_ctq_visibility()
         a.refresh_capabilities(sys.executable)
         await a.workers.wait_for_complete()

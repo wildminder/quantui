@@ -77,13 +77,12 @@ def test_all_format_ids_unique():
 
 def test_expected_formats_registered():
     registered = {f.id for f in COMFY_FORMATS}
-    # 6 original + int8_block upgrade + int8_convrot + w4a4_convrot +
-    # w4a8_asym + onthefly passthrough == 9 (the int8_row alias was removed).
-    for fid in (
-        "fp8_e4m3", "int8_block", "int8_tensor",
-        "int8_convrot", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym", "onthefly",
-    ):
-        assert fid in registered, f"{fid} missing from COMFY_FORMATS"
+    # v0.4.0: the int8_block/int8_tensor/int8_convrot trio collapsed into ONE
+    # unified "int8" entry -> fp8_e4m3, int8, nvfp4, mxfp8, w4a4_convrot,
+    # w4a8_asym, onthefly == 7 (int8_row was removed even earlier).
+    assert registered == {
+        "fp8_e4m3", "int8", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym", "onthefly",
+    }
 
 
 @pytest.mark.parametrize("fmt", COMFY_FORMATS, ids=[f.id for f in COMFY_FORMATS])
@@ -127,12 +126,18 @@ def test_synthesized_kitchen_artifact_validates(tmp_path, format_name):
         json.loads(fh.read(magic).decode("utf-8"))
 
 
-def test_int8_convrot_maps_to_int8_tensorwise_schema():
-    fmt = comfy_format("int8_convrot")
-    assert fmt.quant_format == FORMAT_INT8_TENSORWISE
-    assert "--convrot" in fmt.base_flags
-    # Exactly one ConvRot entry: the int8_row alias was deliberately removed.
-    assert not any(f.id == "int8_row" for f in COMFY_FORMATS)
+def test_unified_int8_convrot_maps_to_int8_tensorwise_schema():
+    # The unified int8 format with convrot on produces the same on-disk artifact
+    # the former int8_convrot entry produced: format=int8_tensorwise + convrot.
+    fmt = comfy_format("int8")
+    assert "--int8" in fmt.base_flags
+    convrot_opt = next(o for o in fmt.extra_options if o.key == "convrot")
+    assert convrot_opt.cli_when_true == "--convrot"
+    sm_opt = next(o for o in fmt.extra_options if o.key == "scaling_mode")
+    assert [v for _, v in sm_opt.choices] == ["block", "tensor", "row"]
+    # Exactly one INT8 entry; every legacy id stays dead (tripwire).
+    ids = {f.id for f in COMFY_FORMATS}
+    assert not ids & {"int8_row", "int8_block", "int8_tensor", "int8_convrot"}
 
 
 def test_onthefly_passthrough_has_no_quant_format():

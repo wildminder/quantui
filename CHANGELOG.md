@@ -3,6 +3,28 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is SemVer.
 
+## [0.4.0] - 2026-08-25
+
+### Changed
+- **BREAKING (UI/registry): the three INT8 format entries collapsed into ONE.**
+  `int8_block` / `int8_tensor` / `int8_convrot` are replaced by a single `int8`
+  ("INT8 (W8A8)") entry with a first-class **Scaling mode** option
+  (block / tensor / row). The UI now shows only valid combinations:
+  - `Block size` appears only for scaling `block`;
+  - `Apply ConvRot` + `ConvRot group size` appear only for scaling `row`
+    (ConvRot mathematically requires row scales) and only after the toggle is on;
+  - dead combinations such as "tensor scaling + convrot" can no longer be selected.
+- The old special-cased `#ctq_scaling_mode` panel widget is gone; scaling is a
+  registry-declared `OptionField` widget (`#scaling_mode`) like every other option,
+  with chained `visible_when` predicates over sibling values.
+- Presets: flux2 = int8 + row + ConvRot (former int8_convrot behavior); WAN /
+  Hunyuan = int8 + block. `Preset` gained `recommended_options`.
+- Output auto-naming tags: `int8-<scaling>[-convrot-gs<N>]` (e.g.
+  `model-int8-row-convrot-gs256.safetensors`) replaces `int8_convrot-gs256`.
+- Capability badge: Triton advisory now fires dynamically when the unified INT8
+  format has ConvRot enabled (was keyed to a static format tag).
+- Profiles persist the INT8 options (scaling mode, block size, convrot, group size).
+
 ## [0.3.1] - 2026-08-25
 
 ### Fixed

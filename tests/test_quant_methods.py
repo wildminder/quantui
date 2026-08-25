@@ -44,51 +44,83 @@ def test_enums_and_fields():
 
 
 def test_comfy_formats():
-    assert len(COMFY_FORMATS) == 9
-    cf = comfy_format("int8_convrot")
-    assert cf.base_flags == ["--int8", "--scaling_mode", "row", "--convrot"]
-    # int8_convrot exposes convrot_group_size + the shared INT8 options
-    # (heur, manual_seed, exclude_layers, output_dtype).
+    # v0.4.0: the int8_block/int8_tensor/int8_convrot trio collapsed into ONE
+    # unified "int8" format with a first-class scaling option (9 -> 7 entries).
+    assert len(COMFY_FORMATS) == 7
+    cf = comfy_format("int8")
+    assert cf.base_flags == ["--int8"]
     keys = [o.key for o in cf.extra_options]
     assert keys == [
-        "convrot_group_size", "heur", "manual_seed", "exclude_layers", "output_dtype",
+        "scaling_mode", "block_size", "convrot", "convrot_group_size",
+        "heur", "manual_seed", "exclude_layers", "output_dtype",
     ], keys
-    crs = cf.extra_options[0]
-    assert crs.key == "convrot_group_size"
-    assert crs.visible_when == "format == 'int8_convrot'"
-    assert cf.needs == ["triton"]
-    # The former int8_row duplicate was removed: exactly one ConvRot entry remains.
-    assert all(f.id != "int8_row" for f in COMFY_FORMATS)
+    sm = cf.extra_options[0]
+    assert sm.key == "scaling_mode"
+    assert sm.default == "block"
+    assert sm.cli_flag == "--scaling_mode"
+    assert [v for _, v in sm.choices] == ["block", "tensor", "row"]
+    # scaling_mode is unconditional (always shown); every other option is gated.
+    assert sm.visible_when is None
+    assert all(o.visible_when is not None
+               for o in cf.extra_options if o.key != "scaling_mode")
+    # The former ids are gone for good (alias tripwires).
+    assert all(f.id not in ("int8_row", "int8_block", "int8_tensor", "int8_convrot")
+               for f in COMFY_FORMATS)
     assert len(COMFY_PRESETS) == 5
     assert comfy_preset("flux2").flag == "--flux2"
     assert comfy_format("nvfp4").base_flags == ["--nvfp4"]
     assert comfy_format("mxfp8").base_flags == ["--mxfp8"]
 
 
-def test_int8_block_is_true_blockwise():
-    # P1.1: int8_block must emit explicit block scaling (not rely on the library default
-    # which silently produced tensorwise). A block_size OptionField supplies the size.
-    # It also exposes the shared INT8 options (heur, manual_seed, exclude_layers,
-    # output_dtype) so users can avoid the "dimensions divisible by block_size" crash
-    # and pin layer exclusions / passthrough dtype.
-    cf = comfy_format("int8_block")
-    assert cf.base_flags == ["--int8", "--scaling_mode", "block"]
-    keys = [o.key for o in cf.extra_options]
-    assert keys == ["block_size", "heur", "manual_seed", "exclude_layers", "output_dtype"], keys
-    bs = cf.extra_options[0]
-    assert bs.key == "block_size"
-    assert bs.default == "128"
-    assert bs.cli_flag == "--block_size"
-    assert any(o.key == "heur" and o.cli_when_true == "--heur" for o in cf.extra_options)
-    assert any(o.key == "manual_seed" and o.cli_flag == "--manual_seed" for o in cf.extra_options)
+def test_int8_option_visibility_predicates():
+    # Only valid combinations are visible: block_size only for block scaling;
+    # convrot (+ group size) only for row scaling; group size also needs the
+    # convrot toggle ON.
+    fmt = comfy_format("int8")
+    opts = {o.key: o for o in fmt.extra_options}
+
+    def vis(key, **ctx):
+        return eval_visible_when(opts[key].visible_when,
+                                 {"format": "int8", **ctx})
+
+    base = {"scaling_mode": "block", "convrot": False}
+    assert vis("block_size", **base) is True
+    assert vis("block_size", **{**base, "scaling_mode": "tensor"}) is False
+    assert vis("block_size", **{**base, "scaling_mode": "row"}) is False
+    assert vis("convrot", **{**base, "scaling_mode": "row"}) is True
+    assert vis("convrot", **base) is False
+    row = {"scaling_mode": "row"}
+    assert vis("convrot_group_size", convrot=True, **row) is True
+    assert vis("convrot_group_size", convrot=False, **row) is False
+    # Shared INT8 options are visible in every scaling mode.
+    for key in ("heur", "manual_seed", "exclude_layers", "output_dtype"):
+        assert vis(key, **base) is True, key
+        assert vis(key, **row, convrot=False) is True, key
+    bs = opts["block_size"]
+    assert bs.default == "128" and bs.cli_flag == "--block_size"
+    assert any(o.key == "heur" and o.cli_when_true == "--heur"
+               for o in fmt.extra_options)
 
 
-def test_new_formats_registered():
-    # P1.2 ConvRot + P3/P4/P5 formats.
-    convrot = comfy_format("int8_convrot")
-    assert convrot.quant_format == "int8_tensorwise"
-    assert convrot.base_flags == ["--int8", "--scaling_mode", "row", "--convrot"]
+def test_flux2_preset_pins_row_convrot():
+    p = comfy_preset("flux2")
+    assert p.recommended_format == "int8"
+    assert p.recommended_options.get("scaling_mode") == "row"
+    assert p.recommended_options.get("convrot") is True
+    # Block-scaling presets stay rotation-free.
+    for pid in ("wan", "hunyuan"):
+        pp = comfy_preset(pid)
+        assert pp.recommended_format == "int8"
+        assert pp.recommended_options.get("scaling_mode") == "block"
+        assert "convrot" not in pp.recommended_options
 
+
+def test_backend_enum_has_kitchen():
+    assert Backend.COMFY_KITCHEN.value == "comfy_kitchen"
+
+
+def test_kitchen_and_passthrough_formats():
+    # P3/P4/P5 formats (ConvRot W8A8 is now an option of the unified int8 format).
     w4a4 = comfy_format("w4a4_convrot")
     assert w4a4.backend == Backend.COMFY_KITCHEN
     assert w4a4.quant_format == "convrot_w4a4"
@@ -104,16 +136,12 @@ def test_new_formats_registered():
     assert otf.quant_format is None
 
 
-def test_backend_enum_has_kitchen():
-    assert Backend.COMFY_KITCHEN.value == "comfy_kitchen"
-
-
 def test_helpers():
     gguf = methods_for_family(Family.GGUF)
     assert all(m.family == Family.GGUF for m in gguf)
     assert len(gguf) == len(METHODS)
     assert methods_for_family(Family.COMFY) == []
-    assert len(format_options()) == 9
+    assert len(format_options()) == 7
     assert len(preset_options()) == 5
     assert comfy_format("nvfp4").requires_cuda == "13.0"
     assert comfy_format("nvfp4").requires_py == "3.12"
@@ -126,14 +154,21 @@ def test_helpers():
 
 
 def test_eval_visible_when():
-    assert eval_visible_when("format == 'int8_convrot'", {"format": "int8_convrot"}) is True
-    assert eval_visible_when("format == 'int8_convrot'", {"format": "fp8_e4m3"}) is False
-    assert eval_visible_when("format in ('int8_convrot', 'int8_block')", {"format": "int8_block"}) is True
-    assert eval_visible_when("format in ('int8_convrot', 'int8_block')", {"format": "fp8_e4m3"}) is False
-    assert eval_visible_when("format != 'fp8_e4m3'", {"format": "int8_convrot"}) is True
+    assert eval_visible_when("format == 'int8'", {"format": "int8"}) is True
+    assert eval_visible_when("format == 'int8'", {"format": "fp8_e4m3"}) is False
+    assert eval_visible_when("format in ('int8', 'fp8_e4m3')", {"format": "int8"}) is True
+    assert eval_visible_when("format != 'fp8_e4m3'", {"format": "int8"}) is True
+    # Chained predicates over sibling option values (unified INT8 UI).
+    ctx = {"format": "int8", "scaling_mode": "row", "convrot": True}
+    assert eval_visible_when("scaling_mode == 'row' and convrot", ctx) is True
+    assert eval_visible_when("format == 'int8' and scaling_mode == 'block'", ctx) is False
+    assert eval_visible_when("format == 'int8' and scaling_mode == 'block'",
+                             {**ctx, "scaling_mode": "block"}) is True
     assert eval_visible_when("x not in ('a', 'b')", {"x": "c"}) is True
     assert eval_visible_when(None, {}) is True
     assert eval_visible_when("garbage((", {}) is False  # safe on syntax error
+    # A missing context name resolves falsy -> hidden (never crashes).
+    assert eval_visible_when("convrot", {"format": "int8"}) is False
 
 
 # --------------------------------------------------------------------------- #

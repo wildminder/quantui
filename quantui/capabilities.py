@@ -130,17 +130,22 @@ def probe_worker_env(pybin: str) -> CapabilityReport:
     )
 
 
-def check_ctq_requirements(report: CapabilityReport, format_id: str) -> list[str]:
+def check_ctq_requirements(
+    report: CapabilityReport, format_id: str, option_values: dict | None = None
+) -> list[str]:
     """Return soft, advisory warning strings for running ``format_id`` in ``report``.
 
     Never blocks Run -- the caller decides how (or whether) to surface these. An
-    unknown ``format_id`` returns ``[]`` (no capability warnings).
+    unknown ``format_id`` returns ``[]`` (no capability warnings). ``option_values``
+    carries the format's selected options (e.g. the unified INT8 format's
+    ``convrot`` toggle) so needs that depend on an option value can be checked.
     """
     warnings: list[str] = []
     try:
         fmt = comfy_format(format_id)
     except KeyError:
         return warnings
+    opts = option_values or {}
 
     if report.torch_version is None:
         warnings.append("PyTorch is not importable in this interpreter - install a CUDA build of torch.")
@@ -165,7 +170,12 @@ def check_ctq_requirements(report: CapabilityReport, format_id: str) -> list[str
             f"{fmt.label} needs Python>={fmt.requires_py} (found {report.python_version or 'n/a'})."
         )
 
-    if "triton" in fmt.needs and not report.triton:
+    # Triton: needed by the static "triton" need tag (kitchen-era formats) OR
+    # dynamically when the unified INT8 format has the ConvRot toggle enabled.
+    needs_triton = "triton" in fmt.needs or (
+        format_id == "int8" and bool(opts.get("convrot"))
+    )
+    if needs_triton and not report.triton:
         warnings.append(
             "INT8 kernels need Triton - install 'triton' on Linux / 'triton-windows' on Windows."
         )

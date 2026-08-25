@@ -1,9 +1,9 @@
 """Regression test for handlers.ctq_option_value.
 
-The ComfyUI panel renders only a fixed set of option widgets (#ctq_scaling_mode,
-#convrot_group_size). A format may declare an extra option (e.g. #block_size for
-int8_block) that has NO corresponding widget. ctq_option_value must fall back to the
-option's declared default instead of crashing _read_config with NoMatches.
+Every registry OptionField now has a matching widget in the ComfyUI panel
+(#scaling_mode, #block_size, #convrot, #convrot_group_size, ...), but
+ctq_option_value must still fall back to the option's declared default when a
+widget is not mounted instead of crashing _read_config with NoMatches.
 """
 
 
@@ -26,10 +26,14 @@ class _FakeHandlers(HandlersMixin):
         raise NoMatches("no node matches")
 
 
+def _first_int8_option():
+    fmt = comfy_format("int8")
+    assert fmt.extra_options, "unified int8 must declare options"
+    return fmt.extra_options[0]  # scaling_mode
+
+
 def test_ctq_option_value_falls_back_when_widget_missing():
-    fmt = comfy_format("int8_block")
-    assert fmt.extra_options, "int8_block must declare at least block_size"
-    opt = fmt.extra_options[0]  # block_size
+    opt = _first_int8_option()
     fake = _FakeHandlers()
     val = fake.ctq_option_value(opt)
     assert val == opt.default, f"expected default {opt.default!r}, got {val!r}"
@@ -43,6 +47,5 @@ def test_ctq_option_value_returns_widget_value_when_present():
         def query_one(self, *args, **kwargs):
             return type("W", (), {"value": sentinel})()
 
-    opt = comfy_format("int8_block").extra_options[0]
     fake = _FakeWithWidget()
-    assert fake.ctq_option_value(opt) is sentinel
+    assert fake.ctq_option_value(_first_int8_option()) is sentinel
