@@ -394,9 +394,9 @@ def build_comfy_panel() -> VerticalScroll:
     Widget ids are stable for tests: #ctq_input, #ctq_output, #ctq_format,
     #ctq_preset, #ctq_comfy_quant, #ctq_save_quant_metadata, #ctq_simple,
     #ctq_low_memory, #ctq_calib_samples, #pybin_ctq, #ctq_cap_warn, plus the
-    conditional #ctq_scaling_mode / #convrot_group_size.
+    conditional option widgets (#scaling_mode / #block_size / #convrot /
+    #convrot_group_size etc.) declared by the format registry.
     """
-    scaling_choices = [("block", "block"), ("tensor", "tensor"), ("row", "row")]
     convrot_choices = [("64", "64"), ("256", "256"), ("1024", "1024")]
     return VerticalScroll(
         Label("1. Input: a single .safetensors file, a folder with one, or a HuggingFace sharded folder (model.safetensors.index.json)"),
@@ -415,16 +415,25 @@ def build_comfy_panel() -> VerticalScroll:
         ),
         Label("3. Format"),
         Select(format_options(), id="ctq_format", value=DEFAULT_CTQ_FORMAT, allow_blank=False),
-        Label("Scaling mode", id="ctq_scaling_mode_label", classes="hidden"),
-        Select(scaling_choices, id="ctq_scaling_mode", value="block", allow_blank=False, classes="hidden"),
-        Label("ConvRot group size", id="convrot_group_size_label", classes="hidden"),
-        Select(convrot_choices, id="convrot_group_size", value="256", allow_blank=False, classes="hidden"),
-        # P-expose: INT8 quantization parameters surfaced in the UI so users can avoid
-        # the "dimensions divisible by block_size" crash (block_size -> lower it; heur ->
-        # copy non-divisible weights unchanged). Hidden until an INT8 format is selected.
+        # Unified INT8 option widgets (v0.4.0): scaling / block_size / convrot /
+        # convrot_group_size are now plain OptionField-driven widgets (the old
+        # special-cased #ctq_scaling_mode widget is gone -- the registry owns
+        # both the values and the visibility predicates). All start hidden.
+        Label("Scaling mode", id="scaling_mode_label", classes="hidden"),
+        Select([("block", "block"), ("tensor", "tensor"), ("row", "row")],
+               id="scaling_mode", value="block", allow_blank=False, classes="hidden"),
         Label("Block size", id="block_size_label", classes="hidden"),
         Select([("64", "64"), ("128", "128"), ("256", "256")], id="block_size",
                value="128", allow_blank=False, classes="hidden"),
+        Label("ConvRot rotation (row only)", id="convrot_label", classes="hidden"),
+        Checkbox("Apply ConvRot rotation (needs triton)", id="convrot",
+                 value=False, classes="hidden"),
+        Label("ConvRot group size", id="convrot_group_size_label", classes="hidden"),
+        Select(convrot_choices, id="convrot_group_size", value="256", allow_blank=False, classes="hidden"),
+        # P-expose: INT8 quantization parameters surfaced in the UI so users can avoid
+        # the "dimensions divisible by block_size" crash (heur ->
+        # copy non-divisible weights unchanged). Hidden until an INT8 format is selected.
+        # (Scaling mode / Block size / ConvRot widgets above are registry-declared.)
         Label("Skip inefficient layers (--heur)", id="heur_label", classes="hidden"),
         Checkbox("Copy non-block-divisible weights unchanged (avoids block_size crash)",
                  id="heur", value=False, classes="hidden"),

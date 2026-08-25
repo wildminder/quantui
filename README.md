@@ -86,21 +86,23 @@ The ComfyUI tab's **Format** dropdown controls how weights are quantized:
 | Format | Weights×Activations | Best for |
 | --- | --- | --- |
 | `fp8_e4m3` | 8-bit float × 8-bit | Default; good quality/size balance, no triton needed. |
-| `int8_block` | INT8 × INT8 | Blockwise scales (block size 64/128/256); needs dims divisible by block size (or enable *Skip inefficient layers*). |
-| `int8_tensor` | INT8 × INT8 | One scale per tensor; simplest, most robust to odd shapes. |
-| `int8_convrot` | INT8 × INT8 | Row-wise scales + ConvRot rotation (W8A8); best accuracy of the INT8 modes. Needs `triton`. |
+| `int8` | INT8 × INT8 | One unified entry with a **Scaling mode** selector: `block` (block size 64/128/256; needs dims divisible by block size or *Skip inefficient layers*), `tensor` (simplest, robust to odd shapes), `row` (per-row scales; enables the optional **ConvRot rotation**, best accuracy, needs `triton`). |
 | `nvfp4` / `mxfp8` | 4-bit / 8-bit microscaling | Blackwell (RTX 50xx) GPUs only; python 3.12 + torch 2.10 + CUDA 13. |
 | `w4a4_convrot`, `w4a8_asym` | 4-bit × 4/8-bit | Smallest; requires the comfy-kitchen backend (a ComfyUI-python env). |
 
-### About `INT8 ConvRot (W8A8)`
+### About INT8 scaling modes (unified `int8` format)
 
-`int8_convrot` emits `--int8 --scaling_mode row --convrot` and produces a W8A8
-artifact whose on-disk `.comfy_quant` tag is `format=int8_tensorwise,
-convrot=true` — exactly what ComfyUI's loaders look for. (A separate
-`int8_row` dropdown entry used to exist as a duplicate alias; it was removed
-because both produced identical output.)
+The former separate `int8_block` / `int8_tensor` / `int8_convrot` entries are
+now ONE `int8` format with a **Scaling mode** dropdown — the UI only ever shows
+the options that are valid for the selected scaling (`Block size` appears for
+`block`; the **ConvRot rotation** toggle and its group size appear for `row`
+only). Selecting row + ConvRot emits `--int8 --scaling_mode row --convrot` and
+produces a W8A8 artifact whose on-disk `.comfy_quant` tag is
+`format=int8_tensorwise, convrot=true` — exactly what ComfyUI's loaders look
+for. (The even older `int8_row` duplicate alias was removed earlier because it
+produced identical output.)
 
-**What actually matters when choosing this format** is the *ConvRot group
+**What actually matters when ConvRot is enabled** is the *ConvRot group
 size*: the quantizer picks per layer the largest group size
 (64 / 256 / 1024) that divides the layer's input features — larger groups mean
 fewer scales and a smaller file, smaller groups slightly better accuracy. Leave
@@ -108,7 +110,7 @@ it at the default 256 unless you have a reason.
 
 Quick guidance:
 - No triton / unsure → `fp8_e4m3`.
-- Want smallest-good INT8 with rotation → `int8_convrot`, GS 256.
+- Want smallest-good INT8 with rotation → `int8`, Scaling `row`, tick **Apply ConvRot**, GS 256.
 - Hitting "dimensions divisible by block_size" → lower block size to 64 or tick *Skip inefficient layers*.
 
 
@@ -146,7 +148,7 @@ The COMFY family supports two **mutually exclusive** worker backends, chosen per
 
 | Backend | Module | Formats | Requires |
 | --- | --- | --- | --- |
-| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8_block`, `int8_tensor`, `int8_convrot`, `nvfp4`, `mxfp8`, `onthefly` | `convert_to_quant` + CUDA torch (+ `triton` for the ConvRot formats) |
+| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8` (scaling block/tensor/row, optional ConvRot), `nvfp4`, `mxfp8`, `onthefly` | `convert_to_quant` + CUDA torch (+ `triton` when the INT8 ConvRot toggle is on) |
 | `comfy_kitchen` (`Backend.COMFY_KITCHEN`) | `quantui/worker_ctq_kitchen.py` | `w4a4_convrot`, `w4a8_asym` | a ComfyUI-python interpreter with `comfy-kitchen` + `comfy.quant_ops` (set *Worker Python (ctq)* to that env) |
 
 `convert_to_quant` **cannot** emit W4A4/W4A8 — those are produced only by the
@@ -159,13 +161,13 @@ schema; see [`docs/comfy-quant-schema.md`](docs/comfy-quant-schema.md).
 
 ## Streaming & resumable quantization (ComfyUI / `convert_to_quant`)
 
-For **INT8 without rotation** (`int8_block` / `int8_tensor`) the worker no longer
+For **INT8 without rotation** (`int8`, Scaling `block` / `tensor`) the worker no longer
 needs to materialize a giant merged unquantized temp file for a sharded model.
 Instead it **streams tensor-by-tensor**:
 
-> **Which INT8 formats stream?** Only the *non-rotation* INT8 modes —
-> `int8_block` and `int8_tensor`. The rotation mode `int8_convrot`
-> ("INT8 ConvRot, W8A8") deliberately stays on the legacy whole-file path —
+> **Which INT8 modes stream?** Only the *non-rotation* scaling modes —
+> `block` and `tensor`. The rotation mode (`row` + **Apply ConvRot**,
+> W8A8) deliberately stays on the legacy whole-file path —
 > ConvRot needs a per-layer pre-rotation pass that is out of scope for v1 streaming.
 > FP8 / NVFP4 / MXFP4 / on-the-fly passthrough also stay on the legacy path.
 
@@ -217,14 +219,15 @@ file) — delete the manifest + partial output and start fresh in that case.
   2D weights are copied unchanged instead of being quantized) and **`--manual_seed`**
   (fixed seed for bias-correction calibration) are threaded to *both* the streaming
   and the legacy paths so behavior stays consistent.
-- **INT8 parameters are now exposed in the ComfyUI tab.** When an INT8 format is
-  selected, three extra controls appear: **Block size** (select: 64 / 128 / 256 —
-  default 128), **Skip inefficient layers (--heur)** (checkbox), and **Manual seed**
-  (optional input). If you hit `INT8 block-wise quantization requires dimensions
+- **INT8 parameters are now exposed in the ComfyUI tab.** When the `int8` format is
+  selected, extra controls appear: **Scaling mode** (block / tensor / row), **Block
+  size** (select: 64 / 128 / 256 — default 128; only shown for `block` scaling),
+  **Skip inefficient layers (--heur)** (checkbox), and **Manual seed** (optional
+  input). If you hit `INT8 block-wise quantization requires dimensions
   divisible by block_size` (e.g. a weight shaped `(49152, 576)` is not divisible by
   128), either lower **Block size** to 64 (576 % 64 == 0) or enable **Skip inefficient
-  layers** to copy those non-divisible 2D weights unchanged. The **ConvRot group size**
-  control appears for the `int8_convrot` format.
+  layers** to copy those non-divisible 2D weights unchanged. With Scaling `row`, an
+  **Apply ConvRot** checkbox (needs triton) and the **ConvRot group size** control appear.
 
 ### Validating quantized files
 

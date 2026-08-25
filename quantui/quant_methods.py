@@ -103,6 +103,9 @@ class Preset:
     label: str
     flag: str  # "--flux2" etc.
     recommended_format: str  # default format id when this preset is chosen
+    # Option values applied on top of the recommended format (key -> value).
+    # Lets a preset pin e.g. scaling_mode=row + convrot=True for flux2.
+    recommended_options: dict[str, Any] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -161,7 +164,7 @@ METHODS_BY_ID: dict[str, QuantMethod] = {m.id: m for m in METHODS}
 # ComfyUI / convert_to_quant registry data
 # --------------------------------------------------------------------------- #
 def _int8_common_options() -> list[OptionField]:
-    """Extra quantization options shared by EVERY INT8 format.
+    """Extra quantization options shared by the unified INT8 format.
 
     - ``heur`` (a.k.a. ``--skip_inefficient_layers``): copy 2D weights whose
       dimensions are NOT divisible by ``block_size`` *unchanged* instead of
@@ -177,7 +180,7 @@ def _int8_common_options() -> list[OptionField]:
         OptionField(
             "heur", "Skip inefficient layers (--heur)", "checkbox",
             default=False,
-            visible_when="format in ('int8_block', 'int8_tensor', 'int8_convrot')",
+            visible_when="format == 'int8'",
             cli_when_true="--heur",
             help="Copy 2D weights whose dims aren't divisible by block_size unchanged "
                  "instead of quantizing them. Use this to avoid the "
@@ -186,7 +189,7 @@ def _int8_common_options() -> list[OptionField]:
         OptionField(
             "manual_seed", "Manual seed (optional)", "input",
             default="",
-            visible_when="format in ('int8_block', 'int8_tensor', 'int8_convrot')",
+            visible_when="format == 'int8'",
             cli_flag="--manual_seed",
             help="Fixed seed for the simulated calibration data used in bias correction. "
                  "Leave empty for the streaming default (reproducible across runs).",
@@ -194,7 +197,7 @@ def _int8_common_options() -> list[OptionField]:
         OptionField(
             "exclude_layers", "Exclude layers (regex, optional)", "input",
             default="",
-            visible_when="format in ('int8_block', 'int8_tensor', 'int8_convrot')",
+            visible_when="format == 'int8'",
             cli_flag="--exclude_layers",
             help="Regex of tensor names kept at original precision. Example for "
                  "Raon-OpenTTS int8-convrot: attn_norm|text_embed",
@@ -202,7 +205,7 @@ def _int8_common_options() -> list[OptionField]:
         OptionField(
             "output_dtype", "Output dtype for unquantized weights", "select",
             default="bfloat16", choices=[("bfloat16", "bfloat16"), ("float16", "float16")],
-            visible_when="format in ('int8_block', 'int8_tensor', 'int8_convrot')",
+            visible_when="format == 'int8'",
             cli_flag="--output_dtype",
             help="Downcasts fp32 passthrough weights (bfloat16 default == the "
                  "upstream quantize_raon_int8_convrot.py --downcast-fp32 behavior). "
@@ -213,45 +216,53 @@ def _int8_common_options() -> list[OptionField]:
 
 COMFY_FORMATS: list[ComfyFormat] = [
     ComfyFormat("fp8_e4m3", "FP8 E4M3 (default)", base_flags=["--comfy_quant"]),
-    # P1.1: true blockwise INT8 (previously emitted only --int8 -> library-default
-    # tensorwise). Now explicitly requests block scaling with a configurable block size.
+    # Unified INT8 entry (v0.4.0): replaces the former int8_block / int8_tensor /
+    # int8_convrot trio, which exposed dead combinations (e.g. "tensor scaling +
+    # convrot" did nothing). Scaling is now a first-class option and the UI shows
+    # only valid combinations: block_size appears ONLY for block scaling; the
+    # ConvRot toggle + group size appear ONLY for row scaling (ConvRot
+    # mathematically requires row scales). base_flags carry only the
+    # unconditional flag -- --scaling_mode is emitted from the OptionField below.
     ComfyFormat(
-        "int8_block", "INT8 blockwise",
-        base_flags=["--int8", "--scaling_mode", "block"],
+        "int8", "INT8 (W8A8)",
+        base_flags=["--int8"],
         extra_options=[
+            OptionField(
+                "scaling_mode", "Scaling mode", "select",
+                default="block",
+                choices=[("block", "block"), ("tensor", "tensor"), ("row", "row")],
+                cli_flag="--scaling_mode",
+                help="INT8 scale granularity: block (finest, needs dims divisible "
+                     "by block_size), tensor (one scale per tensor), row (per "
+                     "output row; required for ConvRot).",
+            ),
             OptionField(
                 "block_size", "Block size", "select",
                 default="128", choices=[("64", "64"), ("128", "128"), ("256", "256")],
-                visible_when="format == 'int8_block'",
+                visible_when="format == 'int8' and scaling_mode == 'block'",
                 cli_flag="--block_size",
                 help="Block dimension for blockwise INT8 scaling. Each tensor dimension "
                      "must be divisible by block_size. If you hit 'dimensions divisible by "
                      "block_size', lower this to 64 (or enable 'Skip inefficient layers').",
             ),
-            *_int8_common_options(),
-        ],
-    ),
-    ComfyFormat(
-        "int8_tensor", "INT8 tensor", base_flags=["--int8", "--scaling_mode", "tensor"],
-        extra_options=[*_int8_common_options()],
-    ),
-    # P1.2: W8A8 ConvRot output. Maps 1:1 onto the toolkit's "int8_convrot" mode
-    # (format=int8_tensorwise + convrot). The former "int8_row" duplicate entry was
-    # removed -- both emitted identical flags/artifacts and only confused users.
-    ComfyFormat(
-        "int8_convrot", "INT8 ConvRot (W8A8)",
-        base_flags=["--int8", "--scaling_mode", "row", "--convrot"],
-        extra_options=[
+            OptionField(
+                "convrot", "Apply ConvRot rotation (W8A8)", "checkbox",
+                default=False,
+                visible_when="format == 'int8' and scaling_mode == 'row'",
+                cli_when_true="--convrot",
+                help="Rotate weights before row-scaled INT8 quantization (needs triton; "
+                     "runs the learned-rounding path -- lower num_iter to speed it up).",
+            ),
             OptionField(
                 "convrot_group_size", "ConvRot group size", "select",
                 default="256", choices=[("64", "64"), ("256", "256"), ("1024", "1024")],
-                visible_when="format == 'int8_convrot'",
+                visible_when=("format == 'int8' and scaling_mode == 'row' "
+                              "and convrot"),
                 cli_flag="--convrot_group_size",
             ),
             *_int8_common_options(),
         ],
-        needs=["triton"],
-        quant_format="int8_tensorwise",
+        needs=[],  # triton is needed only when the convrot toggle is ON (dynamic check)
     ),
     ComfyFormat(
         "nvfp4", "NVFP4 (Blackwell)", base_flags=["--nvfp4"], needs=["blackwell"],
@@ -280,10 +291,14 @@ COMFY_FORMATS: list[ComfyFormat] = [
 ]
 
 COMFY_PRESETS: list[Preset] = [
-    Preset("flux2", "FLUX.2", "--flux2", "int8_convrot"),
-    Preset("wan", "WAN", "--wan", "int8_block"),
+    # flux2 keeps the former int8_convrot behavior: row scaling + rotation.
+    Preset("flux2", "FLUX.2", "--flux2", "int8",
+           recommended_options={"scaling_mode": "row", "convrot": True}),
+    Preset("wan", "WAN", "--wan", "int8",
+           recommended_options={"scaling_mode": "block"}),
     Preset("t5xxl", "T5-XXL", "--t5xxl", "fp8_e4m3"),
-    Preset("hunyuan", "Hunyuan", "--hunyuan", "int8_block"),
+    Preset("hunyuan", "Hunyuan", "--hunyuan", "int8",
+           recommended_options={"scaling_mode": "block"}),
     Preset("zimage", "Z-Image", "--zimage", "fp8_e4m3"),
 ]
 

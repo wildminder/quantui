@@ -100,17 +100,24 @@ def ctq_quant_tags(
     low_memory: bool = False,
     calib_samples: str = "",
     heur: bool = False,
+    scaling: str | None = None,
+    convrot: bool = False,
 ) -> list[str]:
     """Short, filesystem-safe tags describing a ComfyUI/ctq configuration.
 
     Mirrors the widget-reading ``HandlersMixin.ctq_quant_tags`` but consumes plain
     values. The format id is the primary descriptor; extra tags only capture options
-    that change the emitted artifact.
+    that change the emitted artifact. For the unified ``int8`` format the scaling
+    mode becomes a tag (``int8-block`` / ``int8-tensor`` / ``int8-row``) and
+    ``convrot`` + ``gs<N>`` appear only when rotation is actually on.
     """
     tags = [fmt]
-    if fmt == "int8_convrot":
-        if convrot_group_size:
-            tags.append(f"gs{convrot_group_size}")
+    if fmt == "int8" and scaling:
+        tags.append(scaling)
+        if convrot:
+            tags.append("convrot")
+            if convrot_group_size:
+                tags.append(f"gs{convrot_group_size}")
     if simple:
         tags.append("simple")
     if low_memory:
@@ -337,12 +344,17 @@ def build_ctq_cmd(c: CtqConfig) -> list[str]:
         # Tell the kitchen worker which on-disk .comfy_quant format to serialize.
         cmd += ["--format-id", fmt]
 
-    # extra options declared by the format (e.g. convrot_group_size, block_size)
-    context = {"format": fmt}
+    # extra options declared by the format (e.g. scaling_mode, block_size,
+    # convrot, convrot_group_size). Predicates can reference sibling option
+    # values (block_size requires scaling_mode == 'block'; convrot_group_size
+    # requires row + convrot), so the context accumulates resolved values in
+    # declaration order.
+    context: dict[str, Any] = {"format": fmt}
     for opt in cf.extra_options:
         if opt.visible_when and not eval_visible_when(opt.visible_when, context):
             continue
         val = c.option_values.get(opt.key, opt.default)
+        context[opt.key] = val
         # Skip unset values: None, or an empty string (e.g. a blank manual_seed input),
         # so we never emit a dangling "--manual_seed" with no value.
         if val is None or val == "":

@@ -52,22 +52,27 @@ def test_validate_gguf_and_ctq():
 
 
 def test_build_ctq_cmd_emits_flags(tmp_path):
+    # Unified INT8 with row scaling + ConvRot (the flux2 recipe, formerly
+    # the separate int8_convrot format entry).
     m = tmp_path / "model.safetensors"
     m.write_text("x")
     c = rc.CtqConfig(
         input=str(m),
-        output=str(tmp_path / "model-fp8_e4m3.safetensors"),
+        output=str(tmp_path / "model-int8-row-convrot.safetensors"),
         pybin=sys.executable,
-        format="int8_convrot",
+        format="int8",
         output_mode="sharded",
         preset="flux2",
-        option_values={"convrot_group_size": "256"},
+        option_values={
+            "scaling_mode": "row", "convrot": True,
+            "convrot_group_size": "256",
+        },
         comfy_quant=False,
         save_quant_metadata=False,
         simple=False,
         low_memory=False,
         calib_samples="",
-        quant_tags=rc.ctq_quant_tags("int8_convrot", "256", False, False, ""),
+        quant_tags=rc.ctq_quant_tags("int8", "256", scaling="row", convrot=True),
     )
     cmd = rc.build_ctq_cmd(c)
     for tok in ["-i", "-o", "--int8", "--scaling_mode", "row",
@@ -78,30 +83,52 @@ def test_build_ctq_cmd_emits_flags(tmp_path):
 
 
 def test_build_ctq_cmd_int8_block_emits_blockwise(tmp_path):
-    # P1.1: int8_block -> explicit block scaling + block_size (default 128).
+    # Block scaling: --block_size is emitted (default 128) but no convrot flag.
     m = tmp_path / "model.safetensors"
     m.write_text("x")
     c = rc.CtqConfig(
-        input=str(m), output=str(tmp_path / "model-int8_block.safetensors"),
-        pybin=sys.executable, format="int8_block", output_mode="sharded",
-        quant_tags=rc.ctq_quant_tags("int8_block"),
+        input=str(m), output=str(tmp_path / "model-int8-block.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
+        option_values={"scaling_mode": "block"},
+        quant_tags=rc.ctq_quant_tags("int8", scaling="block"),
     )
     cmd = rc.build_ctq_cmd(c)
     assert cmd[0] == sys.executable and cmd[1] == "-m" and cmd[2] == "quantui.worker_ctq"
     for tok in ["--int8", "--scaling_mode", "block", "--block_size", "128"]:
         assert tok in cmd, tok
+    assert "--convrot" not in cmd, cmd
+
+
+def test_build_ctq_cmd_int8_tensor_hides_block_size_and_convrot(tmp_path):
+    # Ambiguity fix: tensor scaling must NOT leak block_size/convrot flags even if
+    # stale values linger in option_values (visibility predicate filters them).
+    m = tmp_path / "model.safetensors"
+    m.write_text("x")
+    c = rc.CtqConfig(
+        input=str(m), output=str(tmp_path / "model-int8-tensor.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
+        option_values={"scaling_mode": "tensor", "block_size": "64", "convrot": True},
+        quant_tags=rc.ctq_quant_tags("int8", scaling="tensor"),
+    )
+    cmd = rc.build_ctq_cmd(c)
+    for tok in ["--int8", "--scaling_mode", "tensor"]:
+        assert tok in cmd, tok
+    assert "--block_size" not in cmd, cmd
+    assert "--convrot" not in cmd, cmd
+    assert "--convrot_group_size" not in cmd, cmd
 
 
 def test_build_ctq_cmd_int8_block_exposes_heur_and_manual_seed(tmp_path):
     # UI-exposure (Msg 4): block_size select, --heur checkbox, --manual_seed input must
-    # all flow into the worker command for int8_block.
+    # all flow into the worker command.
     m = tmp_path / "model.safetensors"
     m.write_text("x")
     c = rc.CtqConfig(
-        input=str(m), output=str(tmp_path / "model-int8_block.safetensors"),
-        pybin=sys.executable, format="int8_block", output_mode="sharded",
-        option_values={"block_size": "64", "heur": True, "manual_seed": "233983427"},
-        quant_tags=rc.ctq_quant_tags("int8_block", heur=True),
+        input=str(m), output=str(tmp_path / "model-int8-block.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
+        option_values={"scaling_mode": "block", "block_size": "64",
+                       "heur": True, "manual_seed": "233983427"},
+        quant_tags=rc.ctq_quant_tags("int8", heur=True, scaling="block"),
     )
     cmd = rc.build_ctq_cmd(c)
     # block_size override 64 (not the 128 default)
@@ -119,10 +146,11 @@ def test_build_ctq_cmd_skips_empty_manual_seed(tmp_path):
     m = tmp_path / "model.safetensors"
     m.write_text("x")
     c = rc.CtqConfig(
-        input=str(m), output=str(tmp_path / "model-int8_block.safetensors"),
-        pybin=sys.executable, format="int8_block", output_mode="sharded",
-        option_values={"block_size": "128", "heur": False, "manual_seed": ""},
-        quant_tags=rc.ctq_quant_tags("int8_block"),
+        input=str(m), output=str(tmp_path / "model-int8-block.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
+        option_values={"scaling_mode": "block", "block_size": "128",
+                       "heur": False, "manual_seed": ""},
+        quant_tags=rc.ctq_quant_tags("int8", scaling="block"),
     )
     cmd = rc.build_ctq_cmd(c)
     assert "--manual_seed" not in cmd, cmd
@@ -139,10 +167,10 @@ def test_build_ctq_cmd_emits_num_iter(tmp_path):
     m = tmp_path / "model.safetensors"
     m.write_text("x")
     c = rc.CtqConfig(
-        input=str(m), output=str(tmp_path / "model-int8_convrot.safetensors"),
-        pybin=sys.executable, format="int8_convrot", output_mode="sharded",
+        input=str(m), output=str(tmp_path / "model-out.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
         num_iter="1000",
-        quant_tags=rc.ctq_quant_tags("int8_convrot"),
+        quant_tags=rc.ctq_quant_tags("int8", scaling="row", convrot=True),
     )
     cmd = rc.build_ctq_cmd(c)
     i = cmd.index("--num_iter")
@@ -156,17 +184,17 @@ def test_build_ctq_cmd_num_iter_suppressed_when_simple_or_blank(tmp_path):
     m.write_text("x")
     c_simple = rc.CtqConfig(
         input=str(m), output=str(tmp_path / "a.safetensors"),
-        pybin=sys.executable, format="int8_convrot", output_mode="sharded",
+        pybin=sys.executable, format="int8", output_mode="sharded",
         simple=True, num_iter="1000",
-        quant_tags=rc.ctq_quant_tags("int8_convrot", simple=True),
+        quant_tags=rc.ctq_quant_tags("int8", simple=True, scaling="row"),
     )
     assert "--num_iter" not in rc.build_ctq_cmd(c_simple), c_simple
 
     c_blank = rc.CtqConfig(
         input=str(m), output=str(tmp_path / "b.safetensors"),
-        pybin=sys.executable, format="int8_convrot", output_mode="sharded",
+        pybin=sys.executable, format="int8", output_mode="sharded",
         num_iter="",
-        quant_tags=rc.ctq_quant_tags("int8_convrot"),
+        quant_tags=rc.ctq_quant_tags("int8", scaling="row"),
     )
     assert "--num_iter" not in rc.build_ctq_cmd(c_blank), c_blank
 
@@ -255,6 +283,17 @@ def test_auto_suggest_six_combos(tmp_path):
                      output_mode="single", quant_tags=["fp8_e4m3"])
     assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) == \
         str(tmp_path / "mymodel-fp8_e4m3.safetensors")
+
+
+def test_ctq_quant_tags_unified_int8():
+    # Unified INT8: scaling becomes a tag; convrot+gs only when rotation is on.
+    assert rc.ctq_quant_tags("int8", scaling="block") == ["int8", "block"]
+    assert rc.ctq_quant_tags("int8", scaling="tensor") == ["int8", "tensor"]
+    assert rc.ctq_quant_tags("int8", "256", scaling="row", convrot=True) == \
+        ["int8", "row", "convrot", "gs256"]
+    assert rc.ctq_quant_tags("int8", "256", scaling="row") == ["int8", "row"]
+    assert rc.ctq_quant_tags("int8", simple=True) == ["int8", "simple"]
+    assert rc.ctq_quant_tags("fp8_e4m3") == ["fp8_e4m3"]
 
 
 def test_default_constants_single_home():

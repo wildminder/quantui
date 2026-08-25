@@ -50,10 +50,9 @@ class HandlersMixin:
         return str(val) if val else DEFAULT_CTQ_FORMAT
 
     def ctq_option_value(self, opt) -> object:
-        # The ComfyUI panel renders only a fixed set of option widgets (#ctq_scaling_mode,
-        # #convrot_group_size). Any option declared in the format registry but not rendered
-        # as a widget (e.g. #block_size for int8_block) has no node to query. Fall back to
-        # the option's declared default so reading config never crashes the run.
+        # Every registry OptionField has a matching widget in the ComfyUI panel
+        # (#scaling_mode, #block_size, #convrot, #convrot_group_size, ...). The
+        # fallback to opt.default remains for robustness (widget not mounted).
         try:
             widget = self.query_one(f"#{opt.key}")
         except NoMatches:
@@ -80,10 +79,11 @@ class HandlersMixin:
         """Short, filesystem-safe tags describing the current ComfyUI/ctq configuration.
 
         Used to build a *meaningful* output filename (e.g. ``fp8_e4m3`` or
-        ``int8_convrot-gs256`` or ``int8_block-simple-lowmem``) instead of the opaque
-        ``-CTQ`` suffix. The format id is the primary descriptor; extra tags only
-        capture options that change the emitted artifact:
-        - ``gs<group_size>`` for the ConvRot group size (only when relevant);
+        ``int8-row-convrot-gs256`` or ``int8-block-simple-lowmem``) instead of the
+        opaque ``-CTQ`` suffix. The format id is the primary descriptor; extra tags
+        only capture options that change the emitted artifact:
+        - ``<scaling>`` for INT8 scaling mode (block/tensor/row);
+        - ``convrot`` + ``gs<group_size>`` when ConvRot is on;
         - ``simple`` / ``lowmem`` when those toggles are on;
         - ``calib<N>`` when a custom calibration-sample count is set.
         ``comfy_quant`` is always on and ``save_quant_metadata`` only adds a sidecar
@@ -93,12 +93,23 @@ class HandlersMixin:
         method only reads the widgets and delegates so there is one source of truth.
         """
         fmt = self.ctq_format()
+        scaling = None
+        convrot = False
         gs = None
-        if fmt == "int8_convrot":
+        if fmt == "int8":
             try:
-                gs = self.query_one("#convrot_group_size", Select).value
+                scaling = str(self.query_one("#scaling_mode", Select).value)
             except NoMatches:
-                gs = None
+                scaling = None
+            try:
+                convrot = bool(self.query_one("#convrot", Checkbox).value)
+            except NoMatches:
+                convrot = False
+            if convrot:
+                try:
+                    gs = self.query_one("#convrot_group_size", Select).value
+                except NoMatches:
+                    gs = None
         simple = lowmem = False
         try:
             simple = bool(self.query_one("#ctq_simple", Checkbox).value)
@@ -118,7 +129,9 @@ class HandlersMixin:
             heur = bool(self.query_one("#heur", Checkbox).value)
         except NoMatches:
             pass
-        return run_config.ctq_quant_tags(fmt, gs, simple, lowmem, calib, heur)
+        return run_config.ctq_quant_tags(
+            fmt, gs, simple, lowmem, calib, heur, scaling=scaling, convrot=convrot
+        )
 
     def ctq_output_stem(self, base: str) -> str:
         """Build a meaningful output filename stem: ``<base>-<quant_tags>``."""
@@ -151,10 +164,22 @@ class HandlersMixin:
         if sid == "method":
             self.update_method_info()
             self.auto_suggest_output(Family.GGUF)
-        elif sid == "ctq_format":
+        elif sid in ("ctq_format", "scaling_mode"):
+            # scaling_mode drives chained visibility (block_size for block;
+            # convrot + group size for row), so re-evaluate like a format change.
             self.refresh_ctq_visibility()
+            if sid == "scaling_mode":
+                self.auto_suggest_output(Family.COMFY)  # tags include the scaling
+        elif sid == "convrot_group_size":
+            self.auto_suggest_output(Family.COMFY)  # tags include gs<N>
         elif sid == "ctq_preset":
             self.apply_preset()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if getattr(event.checkbox, "id", "") == "convrot":
+            # Toggling ConvRot shows/hides the group size (row scaling only).
+            self.refresh_ctq_visibility()
+            self.auto_suggest_output(Family.COMFY)  # tags gain/lose convrot+gs
 
     def on_input_changed(self, event) -> None:
         """Live .pt detection while the user types/pastes into #ctq_input."""
@@ -454,7 +479,13 @@ class HandlersMixin:
         except Exception as exc:  # noqa: BLE001
             self.app.call_from_thread(self.set_capability, f"Capability probe failed: {exc}", True)
             return
-        warns = capabilities.check_ctq_requirements(report, self.ctq_format())
+        fmt = self.ctq_format()
+        try:
+            cf = comfy_format(fmt)
+            option_values = {o.key: self.ctq_option_value(o) for o in cf.extra_options}
+        except KeyError:
+            option_values = {}
+        warns = capabilities.check_ctq_requirements(report, fmt, option_values)
         if warns:
             self.app.call_from_thread(self.set_capability, " | ".join(warns), True)
         else:

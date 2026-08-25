@@ -232,7 +232,7 @@ def fake_ctq(tmp_path):
 def test_worker_integration(tmp_path, fake_ctq):
     inp = tmp_path / "model.safetensors"
     inp.write_text("x")
-    out = tmp_path / "model-int8_convrot-gs256.safetensors"
+    out = tmp_path / "model-int8-row-convrot-gs256.safetensors"
     env = dict(os.environ)
     env["PYTHONPATH"] = fake_ctq + os.pathsep + env.get("PYTHONPATH", "")
     cp = subprocess.run(

@@ -29,24 +29,25 @@ from quantui.tensor_quant import QuantConfig
 # ---- 1. exclude_layers / output_dtype registry + command emission ---------- #
 
 def test_int8_formats_declare_exclude_layers_and_output_dtype():
-    for fmt in ("int8_block", "int8_tensor", "int8_convrot"):
-        cf = comfy_format(fmt)
-        keys = [o.key for o in cf.extra_options]
-        assert "exclude_layers" in keys, fmt
-        assert "output_dtype" in keys, fmt
-        ex = next(o for o in cf.extra_options if o.key == "exclude_layers")
-        assert ex.cli_flag == "--exclude_layers"
-        od = next(o for o in cf.extra_options if o.key == "output_dtype")
-        assert od.cli_flag == "--output_dtype"
-        assert od.default == "bfloat16"
+    # v0.4.0: one unified INT8 format carries all shared INT8 options.
+    cf = comfy_format("int8")
+    keys = [o.key for o in cf.extra_options]
+    assert "exclude_layers" in keys
+    assert "output_dtype" in keys
+    ex = next(o for o in cf.extra_options if o.key == "exclude_layers")
+    assert ex.cli_flag == "--exclude_layers"
+    od = next(o for o in cf.extra_options if o.key == "output_dtype")
+    assert od.cli_flag == "--output_dtype"
+    assert od.default == "bfloat16"
 
 
 def test_build_ctq_cmd_emits_exclude_and_dtype(tmp_path):
     c = run_config.CtqConfig(
         input=str(tmp_path / "m.safetensors"),
         output=str(tmp_path / "out.safetensors"),
-        format="int8_convrot",
-        option_values={"convrot_group_size": "256",
+        format="int8",
+        option_values={"scaling_mode": "row", "convrot": True,
+                       "convrot_group_size": "256",
                        "exclude_layers": "attn_norm|text_embed"},
     )
     cmd = run_config.build_ctq_cmd(c)
@@ -59,7 +60,8 @@ def test_build_ctq_cmd_emits_exclude_and_dtype(tmp_path):
 
 def test_build_ctq_cmd_omits_empty_exclude():
     c = run_config.CtqConfig(
-        input="m.safetensors", output="out.safetensors", format="int8_convrot",
+        input="m.safetensors", output="out.safetensors", format="int8",
+        option_values={"scaling_mode": "row"},
     )
     cmd = run_config.build_ctq_cmd(c)
     assert "--exclude_layers" not in cmd

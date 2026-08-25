@@ -73,10 +73,19 @@ def test_check_nvfp4_needs_torch_and_cuda():
     assert any("CUDA" in w for w in warns)   # 12.8 < 13.0
 
 
-def test_check_int8_needs_triton():
+def test_check_int8_convrot_needs_triton():
     rep = CapabilityReport("3.13", "2.8.0", "12.8", False, False, True)
-    warns = check_ctq_requirements(rep, "int8_convrot")
+    # Unified INT8: Triton is needed only when the ConvRot toggle is ON.
+    warns = check_ctq_requirements(rep, "int8",
+                                   option_values={"convrot": True})
     assert any("Triton" in w for w in warns)
+
+
+def test_check_int8_plain_no_triton_warning():
+    rep = CapabilityReport("3.13", "2.8.0", "12.8", False, False, True)
+    warns = check_ctq_requirements(rep, "int8",
+                                   option_values={"convrot": False})
+    assert not any("Triton" in w for w in warns)
 
 
 def test_fp8_no_warning_when_ok():
@@ -86,7 +95,7 @@ def test_fp8_no_warning_when_ok():
 
 def test_missing_ctq_advisory():
     rep = CapabilityReport("3.13", "2.8.0", "12.8", False, False, False)
-    warns = check_ctq_requirements(rep, "int8_block")
+    warns = check_ctq_requirements(rep, "int8")
     assert any("convert_to_quant" in w for w in warns)
 
 
@@ -100,5 +109,6 @@ def test_blackwell_ok_with_full_stack():
 def test_stub_int8_flags_triton_fp8_clean(monkeypatch):
     patch_probe(monkeypatch, REPORT_OK)
     rep = probe_worker_env("fakepy")
-    assert any("Triton" in w for w in check_ctq_requirements(rep, "int8_convrot"))
+    assert any("Triton" in w for w in check_ctq_requirements(
+        rep, "int8", option_values={"convrot": True}))
     assert check_ctq_requirements(rep, "fp8_e4m3") == []
