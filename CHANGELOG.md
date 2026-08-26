@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Streaming cast writer `cast_safetensors_file` / `cast_shards_to_single`**
+  in `quantui/dtype_cast.py` (plan 2026-08-26, STEP 2.2). Header-driven
+  per-tensor payload streaming with cumulative offset rewrite — mirrors the
+  proven `merge_safetensors_files` discipline and never loads the whole model
+  (~8 MiB element chunks). Dtype policy: floating tensors (F64/F32/F16/BF16)
+  are RTNE-cast to the target; integer/bool tensors pass through byte-identical
+  with their original dtype recorded. `__metadata__` carried from the first
+  shard; duplicate tensor names raise; per-tensor `on_progress(done, total)`
+  callback starting at `(0, N)`.
 - **Pure bit-exact dtype-cast core `quantui/dtype_cast.py`** (plan
   2026-08-26, STEP 2.1). RTNE conversions between F32/BF16/F16 as unsigned
   integer bit math — no numpy/torch, deterministic across platforms. Includes

@@ -16,6 +16,8 @@ Rounding rules implemented:
 * F64 -> BF16/F16: narrow to F32 first (double rounding, documented behavior).
 """
 
+import json
+import os
 import struct
 
 __all__ = [
@@ -25,7 +27,13 @@ __all__ = [
     "f16_bits_to_f32_bits",
     "bf16_bits_to_f32_bits",
     "cast_tensor_bytes",
+    "cast_safetensors_file",
+    "cast_shards_to_single",
 ]
+
+# Payload chunk size for the streaming writer: elements per conversion batch so
+# the intermediate buffer stays ~8 MiB regardless of dtype widths.
+_CHUNK_ELEMS = 2 * 1024 * 1024
 
 
 class UnsupportedCastError(ValueError):
@@ -176,3 +184,179 @@ def cast_tensor_bytes(blob: bytes, src_dtype: str, dst_dtype: str) -> tuple[byte
             else:  # BF16 <-> F16 goes through the exact f32 representation
                 out += _narrow_f32_bits(u32, dst_dtype).to_bytes(2, "little")
     return bytes(out), dst_dtype
+
+
+
+# --------------------------------------------------------------------------- #
+# Streaming cast writer (STEP 2.2): header-driven per-tensor payload streaming,
+# mirroring merge_safetensors_files discipline -- never a full-model load.
+#
+# Dtype policy (plan section 0.3 + real-model semantics): bf16/fp16 formats cast
+# ONLY floating tensors (F64/F32/F16/BF16 sources). Integer / bool tensors
+# (I8 / U8 / I64 / BOOL / ...) pass through byte-identical with their ORIGINAL
+# dtype kept in the output header -- rotary buffers, index tensors and masks
+# must not be bit-mangled by a float narrowing. Unknown dtypes (e.g. F8) also
+# pass through so a cast never hard-fails on an auxiliary tensor it cannot
+# represent; the header records whatever dtype was preserved.
+#
+# Layout note: every conversion here is width-shrinking or identity
+# (F32/F64 -> 2 bytes; F16/BF16 -> 2 bytes; identity unchanged), so each
+# output payload length is computable from the INPUT headers alone. That lets
+# us write the aligned header FIRST and then stream payloads in one sequential
+# pass over the sources -- no temp files, no second header splice, peak extra
+# memory stays at one ~8 MiB chunk.
+# --------------------------------------------------------------------------- #
+
+# Element chunk for cast conversion batches (~8 MiB of F32 source elements).
+_CHUNK_ELEMS = 2 * 1024 * 1024
+
+_COPY_CHUNK = 8 << 20  # verbatim byte-range copy chunk
+
+
+def _read_header(path: str) -> tuple[dict, int]:
+    """Parse a safetensors file into ``(header_dict, data_start_byte)``."""
+    with open(path, "rb") as fh:
+        hdr_len = struct.unpack("<Q", fh.read(8))[0]
+        return json.loads(fh.read(hdr_len).decode("utf-8")), 8 + hdr_len
+
+
+def _out_len_and_dtype(src_dtype: str, n_bytes: int, target: str) -> tuple[int, str]:
+    """Output byte length + dtype for one tensor under the dtype policy."""
+    if src_dtype == target or src_dtype not in _DTYPE_SIZES:
+        return n_bytes, src_dtype  # identity or pass-through (int/bool/unknown)
+    src_size = _DTYPE_SIZES[src_dtype]
+    dst_size = _DTYPE_SIZES[target]
+    return (n_bytes // src_size) * dst_size, target
+
+
+def _stream_cast(fh, blob_start: int, n_bytes: int, src: str, target: str, out) -> None:
+    """Read one tensor payload in element chunks, RTNE-cast, write to ``out``."""
+    elem = _DTYPE_SIZES[src]
+    remaining = n_bytes
+    pos = blob_start
+    while remaining > 0:
+        take_elems = min(_CHUNK_ELEMS, remaining // elem)
+        take = take_elems * elem
+        fh.seek(pos)
+        blob = fh.read(take)
+        data, _dt = cast_tensor_bytes(blob, src, target)
+        out.write(data)
+        pos += take
+        remaining -= take
+
+
+def _build_plan(shard_paths: list[str], target: str):
+    """First pass: parse every shard header, validate uniqueness, compute output
+    specs with cumulative offsets.
+
+    Returns ``(meta, entries, total_data_bytes)`` where ``entries`` is
+    ``[(src_path, data_start, name, out_spec)]`` in deterministic shard order.
+    Raises ``ValueError("duplicate tensor ...")`` on cross-shard collisions.
+    """
+    seen: dict[str, str] = {}
+    meta = None
+    entries = []
+    cursor = 0
+    for sp in shard_paths:
+        header, data_start = _read_header(sp)
+        if "__metadata__" in header and meta is None:
+            meta = header["__metadata__"]
+        for name, spec in header.items():
+            if name == "__metadata__":
+                continue
+            if name in seen:
+                raise ValueError(
+                    f"duplicate tensor {name!r} across shards "
+                    f"({seen[name]!r} and {sp!r})"
+                )
+            seen[name] = sp
+            a, b = spec["data_offsets"]
+            length, dtype_out = _out_len_and_dtype(spec["dtype"], b - a, target)
+            entries.append((sp, data_start, name, {
+                "dtype": dtype_out,
+                "shape": list(spec["shape"]),
+                "data_offsets": [cursor, cursor + length],
+                "_raw": (a, b),
+                "_converts": dtype_out != spec["dtype"],
+                "_src_dtype": spec["dtype"],
+            }))
+            cursor += length
+    return meta, entries, cursor
+
+
+def _write_cast_file(
+    shard_paths: list[str], dst: str, target: str, on_progress, meta, entries,
+) -> None:
+    """Second pass: write the aligned header, then stream payloads sequentially."""
+    from .comfy_quant_schema import _align_header_to_8
+
+    out_header: dict[str, object] = {}
+    if meta is not None:
+        out_header["__metadata__"] = meta
+    for _sp, _ds, _name, spec in entries:
+        out_header[_name] = {k: v for k, v in spec.items() if not k.startswith("_")}
+
+    parent = os.path.dirname(os.path.abspath(dst))
+    os.makedirs(parent, exist_ok=True)
+    hdr_bytes = _align_header_to_8(json.dumps(out_header).encode("utf-8"))
+
+    total = len(entries)
+    if on_progress:
+        on_progress(0, total)
+    handles: dict[str, object] = {}
+
+    def _fh(sp):
+        if sp not in handles:
+            handles[sp] = open(sp, "rb")
+        return handles[sp]
+
+    try:
+        with open(dst, "wb") as out:
+            out.write(struct.pack("<Q", len(hdr_bytes)))
+            out.write(hdr_bytes)
+            for i, (sp, data_start, _name, spec) in enumerate(entries):
+                a, b = spec["_raw"]
+                fh = _fh(sp)
+                if spec["_converts"]:
+                    # Cast path: element-chunked RTNE conversion (~8 MiB chunks).
+                    _stream_cast(fh, data_start + a, b - a,
+                                 spec["_src_dtype"], target, out)
+                else:
+                    # Identity / int-bool pass-through: verbatim byte-range copy.
+                    fh.seek(data_start + a)
+                    remaining = b - a
+                    while remaining > 0:
+                        chunk = fh.read(min(_COPY_CHUNK, remaining))
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        remaining -= len(chunk)
+                if on_progress:
+                    on_progress(i + 1, total)
+    finally:
+        for h in handles.values():
+            h.close()
+
+
+def cast_safetensors_file(src: str, dst: str, target: str, *, on_progress=None) -> None:
+    """Cast ONE ``.safetensors`` file's floating tensors to ``target``.
+
+    ``target`` is a safetensors dtype id ("BF16" or "F16"). Floating tensors are
+    RTNE-cast; integer/bool tensors pass through byte-identical. Streams
+    payloads in chunks -- never loads the whole file. ``on_progress(done, total)``
+    is called per tensor, starting at ``(0, N)``.
+    """
+    meta, entries, _cursor = _build_plan([src], target)
+    _write_cast_file([src], dst, target, on_progress, meta, entries)
+
+
+def cast_shards_to_single(shard_paths: list[str], dst: str, target: str, *,
+                          on_progress=None) -> None:
+    """Merge-cast a shard set into ONE ``.safetensors`` (streaming).
+
+    Mirrors :func:`quantui.worker_ctq.merge_safetensors_files`: cumulative
+    offset rewrite across shards, ``__metadata__`` carried from the first shard
+    that has one, duplicate tensor names raise ``ValueError``.
+    """
+    meta, entries, _cursor = _build_plan(shard_paths, target)
+    _write_cast_file(shard_paths, dst, target, on_progress, meta, entries)
