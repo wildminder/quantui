@@ -328,6 +328,43 @@ def _run_combine(args: argparse.Namespace) -> None:
         _combine_copy_file(args.input, args.output)
 
 
+# Safetensors dtype id each --cast_dtype CLI value maps to.
+_CAST_DTYPE_IDS = {"bfloat16": "BF16", "float16": "F16"}
+
+
+def _run_cast(args: argparse.Namespace) -> None:
+    """bf16/fp16 cast-only path (plan 2026-08-26 STEP 3.1): NO quantization.
+
+    Dispatches single vs sharded like ``_run_combine``: a single-file input is
+    cast in place to one output; a sharded input with a .safetensors output is
+    merge-cast into ONE file. Floating tensors are RTNE-cast; integer/bool
+    tensors pass through unchanged (see dtype_cast module docs).
+    """
+    from .dtype_cast import cast_safetensors_file, cast_shards_to_single
+
+    target = _CAST_DTYPE_IDS[args.cast_dtype]
+    label = args.cast_dtype
+
+    def _on_progress(done: int, total: int) -> None:
+        progress("cast", cur=done, total=total,
+                 label=f"Casting to {label}" if done < total else f"Cast to {label}")
+
+    if is_sharded_folder(args.input):
+        out = args.output
+        if not out.endswith(".safetensors"):
+            fail("Cast requires a .safetensors file path as --output "
+                 "(a sharded input is merged and cast into ONE file).")
+        model = discover_shards(args.input)
+        shard_paths = [os.path.join(args.input, s) for s in model.shard_files]
+        log(f"Merging + casting {len(shard_paths)} shard(s) to {label} ...")
+        cast_shards_to_single(shard_paths, out, target, on_progress=_on_progress)
+    else:
+        log(f"Casting {args.input} to {label} ...")
+        cast_safetensors_file(args.input, args.output, target,
+                              on_progress=_on_progress)
+    log(f"DONE: cast written ({label}).")
+
+
 def _input_data_bytes(path: str) -> int:
     """Total tensor-DATA bytes of a ``.safetensors`` file (header excluded).
 
@@ -496,6 +533,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--combine", action="store_true",
                    help="Combine shards into ONE .safetensors without quantization "
                         "(single-file input is copied unchanged).")
+    p.add_argument("--cast_dtype", choices=["bfloat16", "float16"], default=None,
+                   help="Cast-only output (no quantization): RTNE-convert floating "
+                        "tensors to bfloat16/float16; integer/bool tensors pass "
+                        "through unchanged. A sharded input is merged and cast "
+                        "into ONE .safetensors.")
     p.add_argument("--verbose", action="store_true", help="Verbose progress.")
     return p.parse_args(argv)
 
@@ -512,6 +554,11 @@ def main(argv: list[str] | None = None) -> None:
         log("Combine: merging shards without quantization (no .comfy_quant baked) ...")
         _run_combine(args)
         log("DONE: combine written.")
+        return
+
+    # --- bf16/fp16 cast-only (plan 2026-08-26 STEP 3.1): NO quantization. ------
+    if args.cast_dtype:
+        _run_cast(args)
         return
 
     kwargs = build_quantize_kwargs(args)

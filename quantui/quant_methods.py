@@ -290,6 +290,14 @@ COMFY_FORMATS: list[ComfyFormat] = [
         "combine", "Combine (merge shards, no quant)", backend=Backend.CTQ,
         base_flags=["--combine"],
     ),
+    # BF16 / FP16 cast-only formats (STEP 3.1): pure dtype conversion via the
+    # worker's --cast_dtype short-circuit (checked BEFORE any convert_to_quant
+    # import, same pattern as --combine). Floating tensors are RTNE-cast;
+    # integer/bool tensors pass through unchanged. No .comfy_quant baked.
+    ComfyFormat("bf16", "BF16 (bfloat16, cast only)",
+                base_flags=["--cast_dtype", "bfloat16"]),
+    ComfyFormat("fp16", "FP16 (half, cast only)",
+                base_flags=["--cast_dtype", "float16"]),
 ]
 
 COMFY_PRESETS: list[Preset] = [

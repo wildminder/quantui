@@ -46,7 +46,8 @@ def test_enums_and_fields():
 def test_comfy_formats():
     # v0.4.0: the int8_block/int8_tensor/int8_convrot trio collapsed into ONE
     # unified "int8" format with a first-class scaling option (9 -> 7 entries).
-    assert len(COMFY_FORMATS) == 7
+    # STEP 3.1 (plan 2026-08-26): bf16/fp16 cast-only formats added (7 -> 9).
+    assert len(COMFY_FORMATS) == 9
     cf = comfy_format("int8")
     assert cf.base_flags == ["--int8"]
     keys = [o.key for o in cf.extra_options]
@@ -138,13 +139,27 @@ def test_kitchen_and_combine_formats():
     assert combine.extra_options == []
     assert combine.needs == []
 
+    bf16 = comfy_format("bf16")
+    assert bf16.backend == Backend.CTQ
+    assert bf16.base_flags == ["--cast_dtype", "bfloat16"]
+    assert bf16.quant_format is None
+    assert bf16.extra_options == []
+    assert bf16.needs == []
+
+    fp16 = comfy_format("fp16")
+    assert fp16.backend == Backend.CTQ
+    assert fp16.base_flags == ["--cast_dtype", "float16"]
+    assert fp16.quant_format is None
+    assert fp16.extra_options == []
+    assert fp16.needs == []
+
 
 def test_helpers():
     gguf = methods_for_family(Family.GGUF)
     assert all(m.family == Family.GGUF for m in gguf)
     assert len(gguf) == len(METHODS)
     assert methods_for_family(Family.COMFY) == []
-    assert len(format_options()) == 7
+    assert len(format_options()) == 9
     assert len(preset_options()) == 5
     assert comfy_format("nvfp4").requires_cuda == "13.0"
     assert comfy_format("nvfp4").requires_py == "3.12"
