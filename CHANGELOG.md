@@ -3,6 +3,23 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is SemVer.
 
+## [Unreleased]
+
+### Fixed
+- **Output field no longer reverts to an input-derived path when quant options
+  change** (user report: choosing int8 then switching scaling mode overwrote the
+  output folder with the input filename). New behavior:
+  - a directory-shaped output (e.g. `...\out`) is treated as a DESTINATION FOLDER
+    whether or not it exists on disk; only the auto-generated FILENAME inside it
+    is refreshed (`out\<base>-int8-<scaling>[-convrot-gs<N>].safetensors`);
+  - a hand-typed `.safetensors` filename is never rewritten (explicit-file rule);
+    ownership tracking distinguishes our own suggestion from a user-typed name;
+  - stale convrot/gs tags can no longer leak into filenames after leaving row
+    scaling (tag emission is gated on `scaling == 'row'` AND the checkbox);
+  - sharded + single mode now honors a chosen destination folder instead of
+    always placing the merged file next to the input (mirrors `build_ctq_cmd`);
+  - changing the format also refreshes the suggested filename.
+
 ## [0.4.0] - 2026-08-25
 
 ### Changed

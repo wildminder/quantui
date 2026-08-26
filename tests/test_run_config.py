@@ -273,16 +273,24 @@ def test_auto_suggest_six_combos(tmp_path):
                      format="fp8_e4m3", output_mode="sharded", quant_tags=["fp8_e4m3"])
     assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) is None
 
-    # F: sharded_folder + dir_path -> unchanged
+    # F: sharded_folder + dir_path -> filename inside the chosen folder
+    # (Case-C semantics: the dir is a DESTINATION FOLDER, user-report fix)
     c = rc.CtqConfig(input=str(sh), output=str(outdir), format="fp8_e4m3",
                      output_mode="sharded", quant_tags=["fp8_e4m3"])
-    assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) is None
+    assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) == \
+        str(outdir / "mymodel-fp8_e4m3.safetensors")
 
     # Feature B: sharded_folder + single mode + empty -> .safetensors file
     c = rc.CtqConfig(input=str(sh), output="", format="fp8_e4m3",
                      output_mode="single", quant_tags=["fp8_e4m3"])
     assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) == \
         str(tmp_path / "mymodel-fp8_e4m3.safetensors")
+
+    # Feature B variant: single mode + dir-shaped destination -> file INSIDE it
+    c = rc.CtqConfig(input=str(sh), output=str(outdir), format="fp8_e4m3",
+                     output_mode="single", quant_tags=["fp8_e4m3"])
+    assert rc.suggest_comfy_output(c.input, c.output, c.quant_tags, c.output_mode) == \
+        str(outdir / "mymodel-fp8_e4m3.safetensors")
 
 
 def test_ctq_quant_tags_unified_int8():
