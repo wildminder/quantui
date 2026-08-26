@@ -89,7 +89,20 @@ The ComfyUI tab's **Format** dropdown controls how weights are quantized:
 | `int8` | INT8 × INT8 | One unified entry with a **Scaling mode** selector: `block` (block size 64/128/256; needs dims divisible by block size or *Skip inefficient layers*), `tensor` (simplest, robust to odd shapes), `row` (per-row scales; enables the optional **ConvRot rotation**, best accuracy, needs `triton`). |
 | `nvfp4` / `mxfp8` | 4-bit / 8-bit microscaling | Blackwell (RTX 50xx) GPUs only; python 3.12 + torch 2.10 + CUDA 13. |
 | `combine` | — (no quantization) | Merges a sharded input into ONE `.safetensors` without quantizing (output mode ignored); a single-file input is copied unchanged. No `.comfy_quant` baked. |
+| `bf16` / `fp16` | — (dtype cast only) | Lossless RTNE cast of all floating tensors to bfloat16 / float16 (output mode ignored; sharded input is merge-cast into ONE `.safetensors`). Integer/bool tensors pass through byte-identical. No `.comfy_quant` baked; no torch quantizer needed. |
 | `w4a4_convrot`, `w4a8_asym` | 4-bit × 4/8-bit | Smallest; requires the comfy-kitchen backend (a ComfyUI-python env). |
+
+### About the dtype-cast formats (`bf16` / `fp16`)
+
+These are **not quantization** — every floating-point tensor (F64/F32/F16/BF16)
+is converted with round-to-nearest-even to the target dtype using pure integer
+bit math (bit-exact, deterministic across platforms), while integer/bool
+tensors (e.g. `inv_freq` buffers) are copied unchanged with their original
+dtype recorded. A sharded input is always merged into ONE output file; a
+single-file input is cast in place. The conversion streams tensor payloads in
+~8 MiB chunks and never loads the whole model into RAM. Use `bf16` to shrink
+an F32 checkpoint by half with negligible accuracy loss, or `fp16` when the
+target runtime expects half precision.
 
 ### About INT8 scaling modes (unified `int8` format)
 
@@ -138,8 +151,9 @@ modules. Only `app.py`, `panels.py`, `screens.py`, and `handlers.py` import
 | `quantui/tensor_quant.py` | `QuantConfig` + per-tensor INT8 quantization core (block/tensor/row) and calibration cache. |
 | `quantui/stream_quant.py` | `stream_quantize` / `stream_quantize_sharded` — lazy-read → quantize → append orchestrator with checkpoint manifest. |
 | `quantui/worker.py` | GGUF worker subprocess (Unsloth). |
-| `quantui/worker_ctq.py` | ComfyUI / `convert_to_quant` worker subprocess (FP8 / W8A8 / NVFP4 / MXFP8 / combine). |
+| `quantui/worker_ctq.py` | ComfyUI / `convert_to_quant` worker subprocess (FP8 / W8A8 / NVFP4 / MXFP8 / combine / bf16 / fp16 cast). |
 | `quantui/worker_ctq_kitchen.py` | **comfy-kitchen** worker (W4A4 `convrot_w4a4`, W4A8 `asym_w4a8_int8`). Runs in a ComfyUI-python interpreter. |
+| `quantui/dtype_cast.py` | Pure bit-exact RTNE dtype-cast core + streaming cast writer (F32/F64 ↔ BF16/F16; no numpy/torch). |
 | `quantui/comfy_quant_schema.py` | Pure-stdlib `.comfy_quant` schema validator + serializer (no torch/safetensors import). |
 
 ### ComfyUI backend requirements
@@ -149,7 +163,7 @@ The COMFY family supports two **mutually exclusive** worker backends, chosen per
 
 | Backend | Module | Formats | Requires |
 | --- | --- | --- | --- |
-| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8` (scaling block/tensor/row, optional ConvRot), `nvfp4`, `mxfp8`, `combine` | `convert_to_quant` + CUDA torch (+ `triton` when the INT8 ConvRot toggle is on; NOT needed for `combine`) |
+| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8` (scaling block/tensor/row, optional ConvRot), `nvfp4`, `mxfp8`, `combine`, `bf16`, `fp16` | `convert_to_quant` + CUDA torch (+ `triton` when the INT8 ConvRot toggle is on; NOT needed for `combine` / `bf16` / `fp16` — those paths never import the quantizer) |
 | `comfy_kitchen` (`Backend.COMFY_KITCHEN`) | `quantui/worker_ctq_kitchen.py` | `w4a4_convrot`, `w4a8_asym` | a ComfyUI-python interpreter with `comfy-kitchen` + `comfy.quant_ops` (set *Worker Python (ctq)* to that env) |
 
 `convert_to_quant` **cannot** emit W4A4/W4A8 — those are produced only by the
