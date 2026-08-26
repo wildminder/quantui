@@ -78,10 +78,12 @@ def test_all_format_ids_unique():
 
 def test_expected_formats_registered():
     registered = {f.id for f in COMFY_FORMATS}
-    # STEP 1.2 (plan 2026-08-26): "onthefly" renamed to "combine" -> fp8_e4m3,
-    # int8, nvfp4, mxfp8, w4a4_convrot, w4a8_asym, combine == 7.
+    # STEP 1.2: "onthefly" -> "combine"; STEP 3.1 adds bf16/fp16 cast-only
+    # formats -> fp8_e4m3, int8, nvfp4, mxfp8, w4a4_convrot, w4a8_asym,
+    # combine, bf16, fp16 == 9.
     assert registered == {
-        "fp8_e4m3", "int8", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym", "combine",
+        "fp8_e4m3", "int8", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym",
+        "combine", "bf16", "fp16",
     }
 
 
@@ -145,6 +147,18 @@ def test_combine_has_no_quant_format():
     assert fmt.backend == Backend.CTQ
     assert fmt.quant_format is None
     assert "--combine" in fmt.base_flags
+
+
+def test_bf16_fp16_cast_only_invariants():
+    # STEP 3.1: both cast-only formats are CTQ-backend, carry ONLY their
+    # --cast_dtype flag, and bake no .comfy_quant schema format.
+    for fmt_id, dtype in (("bf16", "bfloat16"), ("fp16", "float16")):
+        fmt = comfy_format(fmt_id)
+        assert fmt.backend == Backend.CTQ
+        assert fmt.quant_format is None
+        assert fmt.extra_options == []
+        assert fmt.needs == []
+        assert fmt.base_flags == ["--cast_dtype", dtype]
 
 
 def test_legacy_onthefly_id_is_dead():

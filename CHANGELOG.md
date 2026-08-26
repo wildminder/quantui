@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **`bf16` / `fp16` cast-only formats end-to-end** (plan 2026-08-26,
+  STEP 3.1). New CTQ registry entries "BF16 (bfloat16, cast only)" and
+  "FP16 (half, cast only)" whose quant tag is the format id
+  (`<base>-bf16.safetensors` auto-naming). The worker gains a `--cast_dtype
+  {bfloat16,float16}` short-circuit checked before any `convert_to_quant`
+  import: a single-file input is cast in place, a sharded input is merge-cast
+  into ONE `.safetensors` (a `.safetensors` output path is required).
 - **Streaming cast writer `cast_safetensors_file` / `cast_shards_to_single`**
   in `quantui/dtype_cast.py` (plan 2026-08-26, STEP 2.2). Header-driven
   per-tensor payload streaming with cumulative offset rewrite — mirrors the
