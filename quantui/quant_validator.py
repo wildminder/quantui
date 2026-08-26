@@ -110,7 +110,7 @@ def validate_comfy_quant(path: str, *, numeric: bool = False) -> ValidationRepor
     non-finite / non-positive scales.
 
     A file with *no* ``.comfy_quant`` tensors is reported ``ok=True`` with a
-    warning (plain FP8/FP16 or on-the-fly passthrough checkpoints are valid too).
+    warning (plain FP8/FP16 or combine/merge checkpoints are valid too).
     """
     report = ValidationReport(path=str(path))
 
@@ -137,7 +137,7 @@ def validate_comfy_quant(path: str, *, numeric: bool = False) -> ValidationRepor
     if not markers:
         report.add_warning(
             "no .comfy_quant markers found -- this is a plain (FP8/FP16) or "
-            "on-the-fly-passthrough checkpoint, not a natively quantized one."
+            "combine/merge checkpoint, not a natively quantized one."
         )
         _summarize_no_markers(report, keys, shapes, p)
         return report

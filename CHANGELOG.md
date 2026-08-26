@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Changed
+- **BREAKING (registry/UI): the `onthefly` format id is renamed to `combine`**
+  ("Combine (merge shards, no quant)", STEP 1.2 of plan 2026-08-26). Combine
+  ALWAYS merges a sharded input into ONE `.safetensors` — the Output mode
+  selection is irrelevant for this format — and a single-file input is copied
+  byte-identical. No `.comfy_quant` metadata is baked. Saved profiles that
+  still reference the old id fall back to the default format via the existing
+  safe-widget-value path (same precedent as the v0.4.0 INT8 id consolidation).
 - **`--combine` replaces the old `--passthrough` worker flag** (plan
   2026-08-26, STEP 1.1). The combine path now ALWAYS merges a sharded input
   into ONE `.safetensors` (output mode is irrelevant); a single-file input is
