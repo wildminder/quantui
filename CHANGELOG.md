@@ -31,6 +31,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   and a ~500k-point monotonicity sample over the f32 space.
 
 ### Changed
+- **Merge-to-one formats (`combine` / `bf16` / `fp16`) are exempt from the
+  "sharded output must be a directory" rule** (plan 2026-08-26, STEP 3.2).
+  These formats ALWAYS write one merged `.safetensors` regardless of Output
+  mode, so a `.safetensors` file output is valid even for a sharded input in
+  sharded mode, and `build_ctq_cmd` appends `<stem>.safetensors` to a
+  directory output in sharded mode too (new `MERGE_TO_ONE_FORMATS` set in
+  `run_config`). Covered by `tests/test_cast_ux.py` (validation, builder,
+  auto-naming Case C/F regression guards, headless UI flow: no dynamic option
+  widgets for these formats, `--cast_dtype` in the built cmd, profile
+  roundtrip + unknown-id fallback).
 - **BREAKING (registry/UI): the `onthefly` format id is renamed to `combine`**
   ("Combine (merge shards, no quant)", STEP 1.2 of plan 2026-08-26). Combine
   ALWAYS merges a sharded input into ONE `.safetensors` — the Output mode
