@@ -119,8 +119,9 @@ def test_backend_enum_has_kitchen():
     assert Backend.COMFY_KITCHEN.value == "comfy_kitchen"
 
 
-def test_kitchen_and_passthrough_formats():
-    # P3/P4/P5 formats (ConvRot W8A8 is now an option of the unified int8 format).
+def test_kitchen_and_combine_formats():
+    # P3/P4 kitchen formats + the combine format (STEP 1.2 rename of the former
+    # on-the-fly passthrough; ConvRot W8A8 is now an option of unified int8).
     w4a4 = comfy_format("w4a4_convrot")
     assert w4a4.backend == Backend.COMFY_KITCHEN
     assert w4a4.quant_format == "convrot_w4a4"
@@ -130,10 +131,12 @@ def test_kitchen_and_passthrough_formats():
     assert w4a8.backend == Backend.COMFY_KITCHEN
     assert w4a8.quant_format == "asym_w4a8_int8"
 
-    otf = comfy_format("onthefly")
-    assert otf.backend == Backend.CTQ
-    assert otf.base_flags == ["--passthrough"]
-    assert otf.quant_format is None
+    combine = comfy_format("combine")
+    assert combine.backend == Backend.CTQ
+    assert combine.base_flags == ["--combine"]
+    assert combine.quant_format is None
+    assert combine.extra_options == []
+    assert combine.needs == []
 
 
 def test_helpers():

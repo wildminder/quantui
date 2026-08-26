@@ -88,6 +88,7 @@ The ComfyUI tab's **Format** dropdown controls how weights are quantized:
 | `fp8_e4m3` | 8-bit float × 8-bit | Default; good quality/size balance, no triton needed. |
 | `int8` | INT8 × INT8 | One unified entry with a **Scaling mode** selector: `block` (block size 64/128/256; needs dims divisible by block size or *Skip inefficient layers*), `tensor` (simplest, robust to odd shapes), `row` (per-row scales; enables the optional **ConvRot rotation**, best accuracy, needs `triton`). |
 | `nvfp4` / `mxfp8` | 4-bit / 8-bit microscaling | Blackwell (RTX 50xx) GPUs only; python 3.12 + torch 2.10 + CUDA 13. |
+| `combine` | — (no quantization) | Merges a sharded input into ONE `.safetensors` without quantizing (output mode ignored); a single-file input is copied unchanged. No `.comfy_quant` baked. |
 | `w4a4_convrot`, `w4a8_asym` | 4-bit × 4/8-bit | Smallest; requires the comfy-kitchen backend (a ComfyUI-python env). |
 
 ### About INT8 scaling modes (unified `int8` format)
@@ -137,7 +138,7 @@ modules. Only `app.py`, `panels.py`, `screens.py`, and `handlers.py` import
 | `quantui/tensor_quant.py` | `QuantConfig` + per-tensor INT8 quantization core (block/tensor/row) and calibration cache. |
 | `quantui/stream_quant.py` | `stream_quantize` / `stream_quantize_sharded` — lazy-read → quantize → append orchestrator with checkpoint manifest. |
 | `quantui/worker.py` | GGUF worker subprocess (Unsloth). |
-| `quantui/worker_ctq.py` | ComfyUI / `convert_to_quant` worker subprocess (FP8 / W8A8 / NVFP4 / MXFP8 / on-the-fly passthrough). |
+| `quantui/worker_ctq.py` | ComfyUI / `convert_to_quant` worker subprocess (FP8 / W8A8 / NVFP4 / MXFP8 / combine). |
 | `quantui/worker_ctq_kitchen.py` | **comfy-kitchen** worker (W4A4 `convrot_w4a4`, W4A8 `asym_w4a8_int8`). Runs in a ComfyUI-python interpreter. |
 | `quantui/comfy_quant_schema.py` | Pure-stdlib `.comfy_quant` schema validator + serializer (no torch/safetensors import). |
 
@@ -148,7 +149,7 @@ The COMFY family supports two **mutually exclusive** worker backends, chosen per
 
 | Backend | Module | Formats | Requires |
 | --- | --- | --- | --- |
-| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8` (scaling block/tensor/row, optional ConvRot), `nvfp4`, `mxfp8`, `onthefly` | `convert_to_quant` + CUDA torch (+ `triton` when the INT8 ConvRot toggle is on) |
+| `convert_to_quant` (`Backend.CTQ`) | `quantui/worker_ctq.py` | `fp8_e4m3`, `int8` (scaling block/tensor/row, optional ConvRot), `nvfp4`, `mxfp8`, `combine` | `convert_to_quant` + CUDA torch (+ `triton` when the INT8 ConvRot toggle is on; NOT needed for `combine`) |
 | `comfy_kitchen` (`Backend.COMFY_KITCHEN`) | `quantui/worker_ctq_kitchen.py` | `w4a4_convrot`, `w4a8_asym` | a ComfyUI-python interpreter with `comfy-kitchen` + `comfy.quant_ops` (set *Worker Python (ctq)* to that env) |
 
 `convert_to_quant` **cannot** emit W4A4/W4A8 — those are produced only by the
@@ -169,7 +170,8 @@ Instead it **streams tensor-by-tensor**:
 > `block` and `tensor`. The rotation mode (`row` + **Apply ConvRot**,
 > W8A8) deliberately stays on the legacy whole-file path —
 > ConvRot needs a per-layer pre-rotation pass that is out of scope for v1 streaming.
-> FP8 / NVFP4 / MXFP4 / on-the-fly passthrough also stay on the legacy path.
+> FP8 / NVFP4 / MXFP4 / combine also stay on the legacy path (combine does not
+> quantize at all).
 
 ```
 input (single .safetensors  OR  HF sharded folder)
@@ -212,7 +214,8 @@ file) — delete the manifest + partial output and start fresh in that case.
   `--output-mode single` or the default sharded output).
 - **ConvRot (rotation)** → legacy whole-file path. Rotation needs a per-layer
   pre-rotation pass and is out of scope for v1 streaming.
-- **FP8 / NVFP4 / MXFP4 / on-the-fly passthrough** → unchanged legacy path.
+- **FP8 / NVFP4 / MXFP4 / combine** → unchanged legacy path (combine never
+  quantizes; it only merges/copies).
 - **`--no-stream`** escape hatch: force the legacy merge path for INT8 if you ever
   need it (e.g. to compare outputs). Streaming is otherwise the default for INT8.
 - **`--heur`** (skip layers with poor quantization characteristics; non-divisible
@@ -251,7 +254,7 @@ ConvRot, `[ceil(out/g), ceil(in/g)]` for blockwise); blockwise layers carry an
 `input_scale` scalar; ConvRot `convrot_groupsize` is a power of four that divides
 `in_features`; biases are **not** quantized; and there are no orphan
 `weight_scale` / `.comfy_quant` entries. A file with no `.comfy_quant` markers is
-reported OK with a warning (it is a plain FP8/FP16 or on-the-fly passthrough
+reported OK with a warning (it is a plain FP8/FP16 or combine/merge
 checkpoint).
 
 > `quantui/quant_validator.py` reuses the pure-stdlib header parser in

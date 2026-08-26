@@ -282,11 +282,13 @@ COMFY_FORMATS: list[ComfyFormat] = [
         "w4a8_asym", "Asymmetric W4A8", backend=Backend.COMFY_KITCHEN,
         base_flags=["--w4a8"], needs=["comfy_kitchen"], quant_format="asym_w4a8_int8",
     ),
-    # P5: On-the-fly passthrough -- copies the input unchanged so ComfyUI's
-    # on_the_fly_quantization loader can quantize at load time. No .comfy_quant baked.
+    # Combine (STEP 1.2 rename of the former on-the-fly passthrough): merges a
+    # sharded input into ONE .safetensors without quantization (output mode is
+    # ignored -- merging is the format's whole purpose); a single-file input is
+    # copied byte-identical. No .comfy_quant baked.
     ComfyFormat(
-        "onthefly", "On-the-fly passthrough", backend=Backend.CTQ,
-        base_flags=["--passthrough"],
+        "combine", "Combine (merge shards, no quant)", backend=Backend.CTQ,
+        base_flags=["--combine"],
     ),
 ]
 

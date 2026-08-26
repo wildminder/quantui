@@ -16,6 +16,7 @@ without torch/comfy/safetensors.
 """
 
 import json
+import os
 import struct
 
 import pytest
@@ -77,11 +78,10 @@ def test_all_format_ids_unique():
 
 def test_expected_formats_registered():
     registered = {f.id for f in COMFY_FORMATS}
-    # v0.4.0: the int8_block/int8_tensor/int8_convrot trio collapsed into ONE
-    # unified "int8" entry -> fp8_e4m3, int8, nvfp4, mxfp8, w4a4_convrot,
-    # w4a8_asym, onthefly == 7 (int8_row was removed even earlier).
+    # STEP 1.2 (plan 2026-08-26): "onthefly" renamed to "combine" -> fp8_e4m3,
+    # int8, nvfp4, mxfp8, w4a4_convrot, w4a8_asym, combine == 7.
     assert registered == {
-        "fp8_e4m3", "int8", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym", "onthefly",
+        "fp8_e4m3", "int8", "nvfp4", "mxfp8", "w4a4_convrot", "w4a8_asym", "combine",
     }
 
 
@@ -140,8 +140,28 @@ def test_unified_int8_convrot_maps_to_int8_tensorwise_schema():
     assert not ids & {"int8_row", "int8_block", "int8_tensor", "int8_convrot"}
 
 
-def test_onthefly_passthrough_has_no_quant_format():
-    fmt = comfy_format("onthefly")
+def test_combine_has_no_quant_format():
+    fmt = comfy_format("combine")
     assert fmt.backend == Backend.CTQ
     assert fmt.quant_format is None
-    assert "--passthrough" in fmt.base_flags
+    assert "--combine" in fmt.base_flags
+
+
+def test_legacy_onthefly_id_is_dead():
+    """Tripwire (mirrors the int8 legacy-id tripwires): the pre-1.2 format id
+    ``onthefly`` must be gone from the registry AND from the source tree."""
+    with pytest.raises(KeyError):
+        comfy_format("onthefly")
+    ids = {f.id for f in COMFY_FORMATS}
+    assert not ids & {"onthefly"}
+    quantui_dir = os.path.join(os.path.dirname(__file__), "..", "quantui")
+    hits = []
+    for root, _dirs, files in os.walk(quantui_dir):
+        for fn in files:
+            if not fn.endswith(".py"):
+                continue
+            p = os.path.join(root, fn)
+            with open(p, encoding="utf-8") as fh:
+                if "onthefly" in fh.read():
+                    hits.append(p)
+    assert not hits, f"legacy id 'onthefly' still referenced in: {hits}"
