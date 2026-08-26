@@ -231,6 +231,47 @@ def test_build_ctq_cmd_routes_w4a8_kitchen(tmp_path):
     assert cmd[i + 1] == "w4a8_asym"
 
 
+def test_build_ctq_cmd_kitchen_never_gets_ctq_only_flags(tmp_path):
+    # User-report follow-up: the kitchen worker's argparse has NO --simple,
+    # --low_memory, --comfy_quant, --save_quant_metadata, --calib_samples,
+    # --num_iter or preset flags. Emitting any of them crashes the worker with
+    # "unrecognized arguments". All CTQ-only toggles must be gated on the
+    # backend: tick every checkbox and set a preset -> kitchen cmd stays clean.
+    m = tmp_path / "model.safetensors"
+    m.write_text("x")
+    c = rc.CtqConfig(
+        input=str(m), output=str(tmp_path / "m-w4a4.safetensors"),
+        pybin=sys.executable, format="w4a4_convrot", output_mode="sharded",
+        quant_tags=rc.ctq_quant_tags("w4a4_convrot"),
+        comfy_quant=True, save_quant_metadata=True,
+        simple=True, low_memory=True, calib_samples="128", num_iter="500",
+        preset="flux2",
+    )
+    cmd = rc.build_ctq_cmd(c)
+    for tok in ["--simple", "--low_memory", "--comfy_quant",
+                "--save_quant_metadata", "--calib_samples", "--num_iter",
+                "--flux2"]:
+        assert tok not in cmd, f"{tok} leaked into kitchen cmd: {cmd}"
+
+
+def test_build_ctq_cmd_ctq_backend_keeps_shared_toggles(tmp_path):
+    # The gating must NOT strip flags from real CTQ-backend runs (fp8/int8).
+    m = tmp_path / "model.safetensors"
+    m.write_text("x")
+    c = rc.CtqConfig(
+        input=str(m), output=str(tmp_path / "m-int8.safetensors"),
+        pybin=sys.executable, format="int8", output_mode="sharded",
+        quant_tags=rc.ctq_quant_tags("int8", simple=True, low_memory=True),
+        comfy_quant=True, save_quant_metadata=True,
+        simple=True, low_memory=True, calib_samples="64",
+    )
+    cmd = rc.build_ctq_cmd(c)
+    for tok in ["--int8", "--comfy_quant", "--save_quant_metadata",
+                "--simple", "--low_memory", "--calib_samples", "64",
+                "--output-mode", "sharded"]:
+        assert tok in cmd, tok
+
+
 def test_auto_suggest_six_combos(tmp_path):
     # single-file model
     m = tmp_path / "model.safetensors"

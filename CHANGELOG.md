@@ -19,6 +19,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   - sharded + single mode now honors a chosen destination folder instead of
     always placing the merged file next to the input (mirrors `build_ctq_cmd`);
   - changing the format also refreshes the suggested filename.
+- **comfy-kitchen formats (W4A4 / W4A8) no longer receive CTQ-only worker
+  flags.** `build_ctq_cmd` gated `--simple`, `--low_memory`, `--comfy_quant`,
+  `--save_quant_metadata`, `--calib_samples`, `--num_iter` and preset flags on
+  the CTQ backend; the kitchen worker's argparse accepts none of them, so a
+  ticked checkbox + W4A4/W4A8 previously crashed with "unrecognized arguments".
 
 ## [0.4.0] - 2026-08-25
 
