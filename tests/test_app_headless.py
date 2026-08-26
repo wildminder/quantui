@@ -387,7 +387,7 @@ async def test_auto_suggest_sharded_empty(tmp_path):
 
 async def test_auto_suggest_sharded_dir(tmp_path):
     a = appmod.QuantApp()
-    async with a.run_test():  # F: sharded_folder + dir_path -> unchanged
+    async with a.run_test():  # F: sharded_folder + dir_path -> filename inside dir
         switch_family(a, Family.COMFY)
         sh = _sharded_dir(tmp_path, "mymodel")
         outdir = tmp_path / "out"
@@ -395,7 +395,11 @@ async def test_auto_suggest_sharded_dir(tmp_path):
         a.query_one("#ctq_input", Input).value = str(sh)
         a.query_one("#ctq_output", Input).value = str(outdir)
         a.auto_suggest_output(Family.COMFY)
-        assert a.query_one("#ctq_output", Input).value == str(outdir)
+        # Case-C semantics: the dir is a destination folder; only the FILENAME
+        # inside it is auto-generated (user-report fix).
+        assert a.query_one("#ctq_output", Input).value == str(
+            outdir / "mymodel-fp8_e4m3.safetensors"
+        )
 
 async def test_auto_suggest_single_file_explicit_file(tmp_path):
     a = appmod.QuantApp()
@@ -418,6 +422,8 @@ async def test_auto_suggest_sharded_explicit_file(tmp_path):
         a.query_one("#ctq_input", Input).value = str(sh)
         a.query_one("#ctq_output", Input).value = str(custom)
         a.auto_suggest_output(Family.COMFY)
+        # Explicit .safetensors is the user's own name (even though validate_ctq
+        # would flag it for sharded mode) -- never rewritten.
         assert a.query_one("#ctq_output", Input).value == str(custom)
 
 # --------------------------------------------------------------------------- #
@@ -1096,3 +1102,79 @@ async def test_stop_button_terminates_comfy_run(tmp_path):
         )
         assert "Stopped" in statuses, statuses
         assert any("stopped by user" in line for line in logs), logs
+
+
+# --------------------------------------------------------------------------- #
+# User-report regression: changing scaling mode must NOT clobber the output
+# folder. A directory-shaped output is a destination folder; only the
+# auto-generated FILENAME inside it refreshes. A hand-typed .safetensors
+# filename is the user's own choice and is never rewritten.
+# --------------------------------------------------------------------------- #
+async def test_scaling_change_keeps_output_folder(tmp_path):
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        switch_family(a, Family.COMFY)
+        m = tmp_path / "tensor-1b-1.5B.safetensors"
+        m.write_text("x")
+        outdir = tmp_path / "out"
+        outdir.mkdir()
+        inp = a.query_one("#ctq_input", Input)
+        out = a.query_one("#ctq_output", Input)
+        inp.value = str(m)
+        out.value = str(outdir)
+        await pilot.pause()
+
+        # Choose int8 -> suggestion places the artifact inside `out`.
+        a.query_one("#ctq_format", Select).value = "int8"
+        await pilot.pause()
+        after_fmt = out.value
+        assert os.path.dirname(after_fmt) == str(outdir), after_fmt
+        assert "-int8-" in os.path.basename(after_fmt)
+        assert a._ctq_output_owned_value == after_fmt
+
+        # Change scaling block -> tensor: folder kept, stem updated, no stale tags.
+        a.query_one("#scaling_mode", Select).value = "tensor"
+        await pilot.pause()
+        final = out.value
+        assert os.path.dirname(final) == str(outdir), f"output escaped folder: {final}"
+        assert "-int8-tensor" in os.path.basename(final)
+        tail = os.path.basename(final).split("-int8-tensor")[1]
+        assert "convrot" not in tail and "gs" not in tail
+
+        # row scaling keeps the folder too.
+        a.query_one("#scaling_mode", Select).value = "row"
+        await pilot.pause()
+        assert os.path.dirname(out.value) == str(outdir)
+
+async def test_hand_typed_filename_is_never_rewritten(tmp_path):
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        switch_family(a, Family.COMFY)
+        m = tmp_path / "model.safetensors"
+        m.write_text("x")
+        outdir = tmp_path / "out"
+        outdir.mkdir()
+        a.query_one("#ctq_input", Input).value = str(m)
+        user_val = str(outdir / "my-custom-name.safetensors")
+        a.query_one("#ctq_output", Input).value = user_val
+        await pilot.pause()
+        # An option change must not touch an explicit hand-typed filename.
+        a.refresh_output_name()
+        assert a.query_one("#ctq_output", Input).value == user_val
+
+async def test_hand_typed_folder_still_gets_filename_refresh(tmp_path):
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        switch_family(a, Family.COMFY)
+        m = tmp_path / "model.safetensors"
+        m.write_text("x")
+        outdir = tmp_path / "out"
+        outdir.mkdir()
+        a.query_one("#ctq_input", Input).value = str(m)
+        # The user typed ONLY the folder -- they chose the where, not the what.
+        a.query_one("#ctq_output", Input).value = str(outdir)
+        await pilot.pause()
+        a.refresh_output_name()
+        assert a.query_one("#ctq_output", Input).value == str(
+            outdir / "model-fp8_e4m3.safetensors"
+        )

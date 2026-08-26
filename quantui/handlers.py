@@ -168,10 +168,9 @@ class HandlersMixin:
             # scaling_mode drives chained visibility (block_size for block;
             # convrot + group size for row), so re-evaluate like a format change.
             self.refresh_ctq_visibility()
-            if sid == "scaling_mode":
-                self.auto_suggest_output(Family.COMFY)  # tags include the scaling
+            self.refresh_output_name()  # tags include fmt + scaling
         elif sid == "convrot_group_size":
-            self.auto_suggest_output(Family.COMFY)  # tags include gs<N>
+            self.refresh_output_name()  # tags include gs<N>
         elif sid == "ctq_preset":
             self.apply_preset()
 
@@ -179,7 +178,7 @@ class HandlersMixin:
         if getattr(event.checkbox, "id", "") == "convrot":
             # Toggling ConvRot shows/hides the group size (row scaling only).
             self.refresh_ctq_visibility()
-            self.auto_suggest_output(Family.COMFY)  # tags gain/lose convrot+gs
+            self.refresh_output_name()  # tags gain/lose convrot+gs
 
     def on_input_changed(self, event) -> None:
         """Live .pt detection while the user types/pastes into #ctq_input."""
@@ -456,7 +455,59 @@ class HandlersMixin:
                 cfg.ctq.output_mode,
             )
             if suggested:
-                self.query_one("#ctq_output", Input).value = suggested
+                out_widget = self.query_one("#ctq_output", Input)
+                out_widget.value = suggested
+                # Track exactly what we wrote so refresh_output_name can tell
+                # our own suggestion from a user-typed path.
+                self._ctq_output_owned_value = suggested
+
+    def refresh_output_name(self) -> None:
+        """Re-suggest the output FILENAME while preserving the user's folder.
+
+        User-report fix: changing an option (e.g. scaling mode) used to either
+        leave a stale filename behind or, once the field held a .safetensors
+        path, never update again (explicit-file rule). Expected behavior: the
+        DIRECTORY part of the field stays untouched; only the auto-generated
+        file name is refreshed to reflect current options.
+
+        Ownership model:
+
+        * Directory-shaped value (``...\\out``, with or without trailing
+          separator, existing or not): always treated as a destination FOLDER.
+          The auto-generated ``<stem>.safetensors`` is refreshed inside it --
+          even when the user typed the folder by hand, because the user chose
+          the *where*, not the *what*.
+        * Explicit ``.safetensors`` value: only rewritten while its content
+          equals what WE last suggested (``self._ctq_output_owned_value``).
+          A hand-typed or browsed filename is the user's own choice and is
+          left strictly alone.
+        """
+        out_widget = self.query_one("#ctq_output", Input)
+        current = out_widget.value.strip()
+        if not current:
+            # Nothing chosen yet -- fall back to the standard full-path suggest.
+            self.auto_suggest_output(Family.COMFY)
+            return
+        cfg = self._read_config()
+        kind, base = run_config.classify_input(cfg.ctq.input)
+        if base is None:
+            return  # unusable input; nothing sensible to suggest
+        state = run_config.output_state(current)
+        if state == "file_path" and current != getattr(
+            self, "_ctq_output_owned_value", None
+        ):
+            return  # explicit filename chosen by the user -> hands off
+        stem = run_config.ctq_output_stem(base, cfg.ctq.quant_tags)
+        if state == "file_path":
+            candidate = os.path.join(
+                os.path.dirname(os.path.abspath(current)), f"{stem}.safetensors"
+            )
+        else:
+            target_dir = current.rstrip("\\/") or current
+            candidate = os.path.join(target_dir, f"{stem}.safetensors")
+        if candidate != current:
+            out_widget.value = candidate
+            self._ctq_output_owned_value = candidate
 
     def list_methods(self) -> None:
         self.log_msg("=== Available quantization methods ===")

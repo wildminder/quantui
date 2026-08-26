@@ -109,12 +109,15 @@ def ctq_quant_tags(
     values. The format id is the primary descriptor; extra tags only capture options
     that change the emitted artifact. For the unified ``int8`` format the scaling
     mode becomes a tag (``int8-block`` / ``int8-tensor`` / ``int8-row``) and
-    ``convrot`` + ``gs<N>`` appear only when rotation is actually on.
+    ``convrot`` + ``gs<N>`` appear only for row scaling WITH rotation on (a stale
+    convrot checkbox under another scaling mode is ignored).
     """
     tags = [fmt]
     if fmt == "int8" and scaling:
         tags.append(scaling)
-        if convrot:
+        # ConvRot requires row scaling; a stale ticked checkbox under another
+        # scaling mode must NOT leak convrot/gs tags into the filename.
+        if convrot and scaling == "row":
             tags.append("convrot")
             if convrot_group_size:
                 tags.append(f"gs{convrot_group_size}")
@@ -173,7 +176,13 @@ def suggest_comfy_output(
     """ComfyUI/ctq 6-combination auto-naming (plan §5.2).
 
     Returns the suggested output path or ``None`` when the field should be left
-    untouched (explicit ``.safetensors`` file, or a directory destination).
+    untouched (explicit ``.safetensors`` file).
+
+    User-report fix: a directory-shaped output (extension-less, e.g.
+    ``...\\out``) is a DESTINATION FOLDER whether or not it exists on disk yet
+    -- the artifact name is placed inside it (Case C). Previously such a path
+    was classified ``dir_path`` and treated as "leave unchanged", so changing
+    quant options never refreshed the filename inside the chosen folder.
     """
     inp = (inp or "").strip()
     output = (output or "").strip()
@@ -183,27 +192,35 @@ def suggest_comfy_output(
     if base is None:
         return None  # unusable input
     state = output_state(output)
-    if state == "file_path":
-        return None  # Cases B / E: an explicit .safetensors file wins.
     stem = ctq_output_stem(base, quant_tags)
     if kind == "single_file":
+        if state == "file_path":
+            return None  # explicit .safetensors -> user's own name, leave as-is
         target_dir = (
             os.path.dirname(os.path.abspath(inp)) if state == "empty" else output
         )
+        # dir_path OR empty-with-no-input-dir fallback -> build <dir>/<stem>.safetensors.
         return os.path.join(target_dir, f"{stem}.safetensors")
     # sharded_folder
     if output_mode == "single":
-        if state != "file_path":
-            parent = os.path.dirname(os.path.abspath(inp))
-            return os.path.join(parent, f"{stem}.safetensors")
-        # file_path -> user's explicit .safetensors wins; leave unchanged.
-        return None
-    # sharded (default): output is a directory.
+        # Mirror build_ctq_cmd: an explicit .safetensors is kept as-is (None);
+        # a directory-shaped or empty destination gets <stem>.safetensors
+        # inside it (or next to the input when empty).
+        if state == "file_path":
+            return None
+        parent = os.path.dirname(os.path.abspath(inp))
+        target_dir = output if output else parent
+        return os.path.join(target_dir, f"{stem}.safetensors")
+    # sharded (default): output is a directory destination.
     if state == "empty":
         parent = os.path.dirname(os.path.abspath(inp))
         return os.path.join(parent, stem)
-    # dir_path (Case F): the directory IS the destination; leave unchanged.
-    return None
+    # dir_path: place the merged single .safetensors inside the chosen folder.
+    # An explicit .safetensors under sharded mode is invalid anyway (validate_ctq
+    # flags it) -- hands off rather than nest a path inside a filename.
+    if state == "file_path":
+        return None
+    return os.path.join(output, f"{stem}.safetensors")
 
 
 # --------------------------------------------------------------------------- #
