@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- **`--combine` replaces the old `--passthrough` worker flag** (plan
+  2026-08-26, STEP 1.1). The combine path now ALWAYS merges a sharded input
+  into ONE `.safetensors` (output mode is irrelevant); a single-file input is
+  copied byte-identical. No `.comfy_quant` metadata is baked and
+  `convert_to_quant` / torch are never imported.
+
 ### Fixed
 - **Output field no longer reverts to an input-derived path when quant options
   change** (user report: choosing int8 then switching scaling mode overwrote the

@@ -295,26 +295,37 @@ def merge_safetensors_files(shard_paths: list[str], out_path: str) -> None:
                     remaining -= len(chunk)
 
 
-def _passthrough_copy(src: str, dst: str) -> None:
-    """Copy the input to the output unchanged (on-the-fly passthrough, P5).
+def _combine_copy_file(src: str, dst: str) -> None:
+    """Byte-identical copy of a single .safetensors to the output path."""
+    parent = os.path.dirname(os.path.abspath(dst))
+    os.makedirs(parent, exist_ok=True)
+    shutil.copy2(src, dst)
 
-    No ``.comfy_quant`` metadata is baked -- ComfyUI's ``on_the_fly_quantization``
-    loader performs the quantization at load time. A single ``.safetensors`` is copied
-    to the output file; a folder (single-file or HuggingFace sharded) is copied into the
-    output directory verbatim.
+
+def _run_combine(args: argparse.Namespace) -> None:
+    """Combine format (plan 2026-08-26, rev. 2): NO quantization.
+
+    A single-file input is copied byte-identical. A sharded input is ALWAYS
+    merged into ONE output .safetensors (output mode is irrelevant -- merging
+    is the format's whole purpose), via ``merge_safetensors_files`` which
+    streams byte ranges and never loads the whole model. No ``.comfy_quant``
+    metadata is baked.
     """
-    import shutil
-
-    if os.path.isdir(src):
-        os.makedirs(dst, exist_ok=True)
-        for entry in sorted(os.listdir(src)):
-            s = os.path.join(src, entry)
-            if os.path.isfile(s):
-                shutil.copy2(s, os.path.join(dst, entry))
+    if is_sharded_folder(args.input):
+        out = args.output
+        if not out.endswith(".safetensors"):
+            fail("Combine requires a .safetensors file path as --output "
+                 "(it always merges shards into ONE file).")
+        model = discover_shards(args.input)
+        shard_paths = [os.path.join(args.input, s) for s in model.shard_files]
+        progress("merge", cur=0, total=len(shard_paths),
+                 label=f"Combining {len(shard_paths)} shard(s)")
+        log(f"Combining {len(shard_paths)} shard(s) into one file ...")
+        merge_safetensors_files(shard_paths, out)
+        progress("merge", cur=len(shard_paths), total=len(shard_paths),
+                 label="Combined")
     else:
-        parent = os.path.dirname(os.path.abspath(dst))
-        os.makedirs(parent, exist_ok=True)
-        shutil.copy2(src, dst)
+        _combine_copy_file(args.input, args.output)
 
 
 def _input_data_bytes(path: str) -> int:
@@ -482,9 +493,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Disable the resumable streaming quantizer and use the legacy "
                         "whole-file path (merges shards for --output-mode single). Streaming "
                         "is the default for INT8; this is an escape hatch.")
-    p.add_argument("--passthrough", action="store_true",
-                   help="On-the-fly passthrough: copy the input to the output unchanged "
-                        "(no .comfy_quant baked) so ComfyUI quantizes at load time.")
+    p.add_argument("--combine", action="store_true",
+                   help="Combine shards into ONE .safetensors without quantization "
+                        "(single-file input is copied unchanged).")
     p.add_argument("--verbose", action="store_true", help="Verbose progress.")
     return p.parse_args(argv)
 
@@ -496,11 +507,11 @@ def main(argv: list[str] | None = None) -> None:
     # HuggingFace sharded folder). No arch guard for diffusion models.
     args.input = resolve_input(args.input)
 
-    # --- On-the-fly passthrough (P5): copy unchanged, no quantization. -----------
-    if args.passthrough:
-        log("On-the-fly passthrough: copying input unchanged (no .comfy_quant baked) ...")
-        _passthrough_copy(args.input, args.output)
-        log("DONE: on-the-fly passthrough copy written.")
+    # --- Combine (plan 2026-08-26): merge shards / copy, NO quantization. -------
+    if args.combine:
+        log("Combine: merging shards without quantization (no .comfy_quant baked) ...")
+        _run_combine(args)
+        log("DONE: combine written.")
         return
 
     kwargs = build_quantize_kwargs(args)
