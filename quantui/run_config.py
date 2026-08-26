@@ -40,6 +40,12 @@ WORKER_PT_CONVERT_MODULE = "quantui.worker_pt_convert"
 DEFAULT_CTQ_FORMAT = COMFY_FORMATS[0].id  # fp8_e4m3
 DEFAULT_CTQ_OUTPUT_MODE = "sharded"
 
+# Formats whose worker path ALWAYS merges into ONE .safetensors regardless of
+# output mode (combine = merge-only; bf16/fp16 cast-only merge-cast). For these
+# a .safetensors output is valid even for a sharded input in sharded mode, and
+# the builder appends <stem>.safetensors to a directory output.
+MERGE_TO_ONE_FORMATS = frozenset({"combine", "bf16", "fp16"})
+
 
 # --------------------------------------------------------------------------- #
 # Dataclasses
@@ -270,8 +276,14 @@ def validate_ctq(c: CtqConfig) -> list[str]:
     elif kind == "sharded_folder":
         # sharded+single accepts a .safetensors file (or a directory/bare stem,
         # builder appends -CTQ.safetensors); only the default sharded mode keeps
-        # the directory-only rule.
-        if c.output_mode == "sharded" and c.output.endswith(".safetensors"):
+        # the directory-only rule. EXCEPT for merge-to-one formats (combine /
+        # bf16 / fp16): they ALWAYS write one merged .safetensors file, so a
+        # file output is correct even in sharded mode.
+        if (
+            c.output_mode == "sharded"
+            and c.format not in MERGE_TO_ONE_FORMATS
+            and c.output.endswith(".safetensors")
+        ):
             errors.append("Sharded output must be a directory (omit the .safetensors filename).")
     elif kind == "single_file" and not c.output.endswith(".safetensors") and not os.path.isdir(c.output):
         errors.append("Output must be a .safetensors file or a directory.")
@@ -336,11 +348,15 @@ def build_ctq_cmd(c: CtqConfig) -> list[str]:
     kind, base = classify_input(inp)
     mode = c.output_mode
     out_final = out
+    merge_to_one = c.format in MERGE_TO_ONE_FORMATS
     if kind == "single_file" and out_final and not out_final.endswith(".safetensors"):
         b = base or "model"
         stem = ctq_output_stem(b, c.quant_tags)
         out_final = os.path.join(out_final, f"{stem}.safetensors")
-    elif kind == "sharded_folder" and mode == "single":
+    elif kind == "sharded_folder" and (mode == "single" or merge_to_one):
+        # Merge-to-one formats (combine / bf16 / fp16) ALWAYS write one merged
+        # .safetensors regardless of output mode, so the stem is appended in
+        # sharded mode too.
         b = base or "model"
         stem = ctq_output_stem(b, c.quant_tags)
         if not out_final:
