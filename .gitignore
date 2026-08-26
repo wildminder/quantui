@@ -172,6 +172,7 @@ _backup/
 # Test scratch dirs
 .pytest_tmp/
 .probe-tmp/
+docs/
 
 # Ruff
 .ruff_cache/
