@@ -26,6 +26,7 @@ BASELINE: dict[str, int] = {
     "app.py": 0,
     "capabilities.py": 0,   # narrowed to json.JSONDecodeError (STEP 2.5)
     "comfy_quant_schema.py": 0,
+    "dtype_cast.py": 0,     # pure bit-math module (STEP 2.1): no except blocks by design
     "handlers.py": 0,
     "ids.py": 0,
     "incremental_safetensors.py": 0,

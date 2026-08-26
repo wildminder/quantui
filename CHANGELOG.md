@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **Pure bit-exact dtype-cast core `quantui/dtype_cast.py`** (plan
+  2026-08-26, STEP 2.1). RTNE conversions between F32/BF16/F16 as unsigned
+  integer bit math — no numpy/torch, deterministic across platforms. Includes
+  zero-copy identity fast path, F64→F32 narrowing, and a little-endian
+  byte-buffer boundary (`cast_tensor_bytes`). Covered by frozen known-answer
+  hex tables, an exhaustive 65 536-value fp16 widen/cast round-trip sweep,
+  and a ~500k-point monotonicity sample over the f32 space.
+
 ### Changed
 - **BREAKING (registry/UI): the `onthefly` format id is renamed to `combine`**
   ("Combine (merge shards, no quant)", STEP 1.2 of plan 2026-08-26). Combine
