@@ -79,6 +79,10 @@ def test_bump_script_patch():
         assert "## [Unreleased]" in log          # fresh empty section re-created
         assert "## [0.1.0]" in log                # old Unreleased became dated section
         assert "some pending change" in log       # content preserved under the new section
+        # Keep-a-Changelog order: the fresh [Unreleased] stays ON TOP and the
+        # pending content lands UNDER the NEW dated section (not under Unreleased).
+        assert log.index("## [Unreleased]") < log.index("## [0.1.1]")
+        assert log.index("some pending change") > log.index("## [0.1.1]")
 
 
 def test_bump_script_minor_and_major():

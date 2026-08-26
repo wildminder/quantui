@@ -55,9 +55,12 @@ def _rotate_changelog(changelog_path: Path, new_version: str) -> None:
             f"## [{new_version}] - {today}\n\n" + text.split("# Changelog", 1)[1].lstrip("\n")
         )
     else:
+        # Keep-a-Changelog semantics: the pending content UNDER [Unreleased]
+        # becomes the dated release section, and a fresh EMPTY [Unreleased]
+        # stays on top. So the dated header is inserted AFTER [Unreleased].
         text = text.replace(
             "## [Unreleased]",
-            f"## [{new_version}] - {today}\n\n## [Unreleased]",
+            f"## [Unreleased]\n\n## [{new_version}] - {today}",
             1,
         )
     changelog_path.write_text(text, encoding="utf-8")
@@ -106,7 +109,7 @@ def main() -> None:
     _rotate_changelog(changelog_path, new)
     print(f"Bumped {old[0]}.{old[1]}.{old[2]} -> {new}")
     print("Next steps:")
-    print(f'  git add quantui/__init__.py CHANGELOG.md')
+    print('  git add quantui/__init__.py CHANGELOG.md')
     print(f'  git commit -m "chore(release): v{new}"')
     print(f'  git tag v{new}')
 

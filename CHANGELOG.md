@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-27
+
 ### Added
 - **`bf16` / `fp16` cast-only formats end-to-end** (plan 2026-08-26,
   STEP 3.1). New CTQ registry entries "BF16 (bfloat16, cast only)" and
