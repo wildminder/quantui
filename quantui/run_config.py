@@ -381,27 +381,32 @@ def build_ctq_cmd(c: CtqConfig) -> list[str]:
         elif opt.cli_when_true and val:
             cmd.append(opt.cli_when_true)
 
-    # preset
-    if c.preset:
-        p = comfy_preset(c.preset)
-        if p:
-            cmd.append(p.flag)
+    # shared toggles -- CTQ worker ONLY. The comfy-kitchen worker's argparse has
+    # none of these options (nor --calib_samples / --num_iter / preset flags);
+    # emitting them there crashes with "unrecognized arguments". The kitchen
+    # path quantizes natively per-tensor and needs no calibration/optimizer.
+    is_kitchen = cf.backend == Backend.COMFY_KITCHEN
+    if not is_kitchen:
+        if c.comfy_quant:
+            cmd.append("--comfy_quant")
+        if c.save_quant_metadata:
+            cmd.append("--save_quant_metadata")
+        if c.simple:
+            cmd.append("--simple")
+        if c.low_memory:
+            cmd.append("--low_memory")
 
-    # shared toggles
-    if c.comfy_quant:
-        cmd.append("--comfy_quant")
-    if c.save_quant_metadata:
-        cmd.append("--save_quant_metadata")
-    if c.simple:
-        cmd.append("--simple")
-    if c.low_memory:
-        cmd.append("--low_memory")
+        if c.calib_samples:
+            cmd += ["--calib_samples", c.calib_samples]
 
-    if c.calib_samples:
-        cmd += ["--calib_samples", c.calib_samples]
+        if c.num_iter and not c.simple:
+            cmd += ["--num_iter", str(c.num_iter)]
 
-    if c.num_iter and not c.simple:
-        cmd += ["--num_iter", str(c.num_iter)]
+        # preset flag is a ctq quantize() kwarg -- meaningless for the kitchen worker.
+        if c.preset:
+            p = comfy_preset(c.preset)
+            if p:
+                cmd.append(p.flag)
 
     # Feature B: tell the worker the output mode for a sharded input.
     cmd += ["--output-mode", mode]
