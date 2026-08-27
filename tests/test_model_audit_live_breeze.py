@@ -13,9 +13,9 @@ import pytest
 
 from quantui.model_audit import audit_file, suggest_exclusions
 
-BF16 = Path("comfy_nodes/Breeze-TTS-2-comfyui/Breeze-TTS-2-bf16.safetensors")
+BF16 = Path("models/tts/Breeze-TTS-2-comfyui/Breeze-TTS-2-bf16.safetensors")
 HYBRID = Path(
-    "comfy_nodes/Breeze-TTS-2-comfyui/Breeze-TTS-2-int8-hybrid.safetensors"
+    "models/tts/Breeze-TTS-2-comfyui/Breeze-TTS-2-int8-hybrid.safetensors"
 )
 
 breeze_files = pytest.mark.skipif(
