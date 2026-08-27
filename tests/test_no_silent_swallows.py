@@ -31,6 +31,7 @@ BASELINE: dict[str, int] = {
     "ids.py": 0,
     "incremental_safetensors.py": 0,
     "live_progress.py": 0,
+    "model_audit.py": 0,    # pure stdlib audit module (STEP 1.1): no except blocks by design
     "panels.py": 0,         # narrowed to NoMatches (STEP 2.5)
     # Reserved names for planned extractions (IMP-001/NTH-004); the stale-entry
     # check below ignores them until they exist.
