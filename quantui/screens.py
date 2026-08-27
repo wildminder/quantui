@@ -23,7 +23,7 @@ from textual.widgets import (
     Label,
 )
 
-from .model_audit import AuditError, _human_bytes, audit_file, suggest_exclusions
+from .model_audit import AuditError, _human_bytes, audit, suggest_exclusions
 
 
 class PathModal(ModalScreen):
@@ -250,8 +250,10 @@ class RecentJobsScreen(ModalScreen):
 class AuditScreen(ModalScreen):
     """Model-audit modal (plan 2026-08-27, STEP 4.1).
 
-    Runs :func:`quantui.model_audit.audit_file` synchronously in a worker
-    thread (header-only, so it is fast even for huge checkpoints) and posts
+    Runs :func:`quantui.model_audit.audit` synchronously in a worker
+    thread (header-only, so it is fast even for huge checkpoints; the
+    dispatcher accepts a single ``.safetensors`` file or a HuggingFace
+    sharded model folder) and posts
     the result back to the UI: a summary header line, a ``DataTable`` with the
     per-module table (module / tensors / params / bytes / linears), and the
     suggested ``exclude_layers`` regex in a read-only, selectable ``Input``
@@ -294,7 +296,7 @@ class AuditScreen(ModalScreen):
     def _run_audit(self) -> None:
         """Worker-thread body: audit the file and post the result to the UI."""
         try:
-            report = audit_file(self.audit_path)
+            report = audit(self.audit_path)
             suggestion = suggest_exclusions(report)
         except AuditError as exc:
             self.app.call_from_thread(self._show_error, str(exc))
