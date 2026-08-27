@@ -321,3 +321,48 @@ def audit_file(path: str) -> AuditReport:
         quant_format_histogram=histogram,
         total_bytes=total_bytes,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Exclusion suggestion (plan STEP 2.2).
+# --------------------------------------------------------------------------- #
+# ctq quantizes only 2D ``.weight`` tensors, so the suggested regex only needs
+# to cover the 2D keep-set: embeddings, heads, and unknown-role 2D weights.
+_KEEP_CATEGORIES: frozenset[str] = frozenset({"embedding", "head", "linear_review"})
+
+
+@dataclass(frozen=True)
+class ExclusionSuggestion:
+    """A starting ``exclude_layers`` regex covering the 2D keep-set."""
+
+    regex: str  # single alternation, anchored, re.escape'd, sorted; "" if empty
+    names: tuple[str, ...]  # the keep-set the regex covers (sorted)
+    rationale: dict[str, int]  # category -> count that motivated the regex
+
+
+def suggest_exclusions(report: AuditReport) -> ExclusionSuggestion:
+    """Propose a starting ``exclude_layers`` regex from an :class:`AuditReport`.
+
+    Includes exactly the 2D ``.weight`` tensors in the keep categories
+    (``embedding`` / ``head`` / ``linear_review``); vectors, biases, ``other``
+    and the kitchen companions are never touched by ctq and need no entry.
+
+    The regex is ONE alternation of ``re.escape``d names, anchored ``^…$`` and
+    sorted for determinism, so it reproduces the keep-set under the
+    ``re.search`` semantics of ``QuantConfig.excluded`` (tensor_quant.py:113).
+    Empty keep-set -> ``regex == ""``. The tool suggests, the human decides:
+    stage-2 exclusions (hot loops / skinny GEMMs) are the user's call.
+    """
+    keep = sorted(
+        info.name
+        for info in report.tensors
+        if info.category in _KEEP_CATEGORIES and len(info.shape) == 2
+    )
+    rationale: dict[str, int] = {}
+    for info in report.tensors:
+        if info.category in _KEEP_CATEGORIES and len(info.shape) == 2:
+            rationale[info.category] = rationale.get(info.category, 0) + 1
+    if not keep:
+        return ExclusionSuggestion(regex="", names=(), rationale={})
+    regex = "^(" + "|".join(re.escape(name) for name in keep) + ")$"
+    return ExclusionSuggestion(regex=regex, names=tuple(keep), rationale=rationale)
