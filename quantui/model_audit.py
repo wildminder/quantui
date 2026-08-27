@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 
 # --------------------------------------------------------------------------- #
 # Category vocabulary -- every tensor gets exactly one of these.
@@ -155,3 +156,88 @@ def tensor_bytes(dtype: str, shape: list[int]) -> int:
     if itemsize is None:
         return 0
     return itemsize * math.prod(shape)
+
+
+# --------------------------------------------------------------------------- #
+# Module grouping + aggregation (plan STEP 1.2).
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class TensorInfo:
+    """One classified tensor from a safetensors header."""
+
+    name: str
+    dtype: str
+    shape: tuple[int, ...]
+    category: str
+    module: str
+    nbytes: int
+
+
+def module_of(name: str) -> str:
+    """Return the top-level module: the prefix before the first ``"."``.
+
+    Names without a dot (and the empty name) belong to ``"(root)"``.
+    """
+    if "." not in name:
+        return "(root)"
+    return name.split(".", 1)[0]
+
+
+def collect_tensors(header: dict) -> list[TensorInfo]:
+    """Classify every tensor in a parsed safetensors header.
+
+    Skips the ``__metadata__`` pseudo-entry and returns the infos in
+    deterministic (name-sorted) order regardless of header insertion order.
+    """
+    infos: list[TensorInfo] = []
+    for name in sorted(header):
+        if name == "__metadata__":
+            continue
+        spec = header[name]
+        dtype = spec.get("dtype", "")
+        shape = tuple(spec.get("shape", []))
+        infos.append(
+            TensorInfo(
+                name=name,
+                dtype=dtype,
+                shape=shape,
+                category=classify_tensor(name, list(shape)),
+                module=module_of(name),
+                nbytes=tensor_bytes(dtype, list(shape)),
+            )
+        )
+    return infos
+
+
+@dataclass
+class ModuleSummary:
+    """Aggregated statistics for one top-level module."""
+
+    module: str
+    tensors: int
+    params: int
+    nbytes: int
+    category_counts: dict[str, int]
+
+
+def summarize_modules(infos: list[TensorInfo]) -> list[ModuleSummary]:
+    """Aggregate :class:`TensorInfo` rows per top-level module.
+
+    Returns summaries sorted by byte total descending, then module name
+    ascending (deterministic tie-break).
+    """
+    per_module: dict[str, ModuleSummary] = {}
+    for info in infos:
+        summary = per_module.get(info.module)
+        if summary is None:
+            summary = ModuleSummary(
+                module=info.module, tensors=0, params=0, nbytes=0, category_counts={}
+            )
+            per_module[info.module] = summary
+        summary.tensors += 1
+        summary.params += math.prod(info.shape)
+        summary.nbytes += info.nbytes
+        summary.category_counts[info.category] = (
+            summary.category_counts.get(info.category, 0) + 1
+        )
+    return sorted(per_module.values(), key=lambda s: (-s.nbytes, s.module))

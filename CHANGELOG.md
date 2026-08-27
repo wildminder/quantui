@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit module grouping + aggregation** (plan 2026-08-27, STEP 1.2).
+  `TensorInfo` (frozen per-tensor record), `module_of` (top-level prefix),
+  `collect_tensors` (header -> classified, name-sorted infos, `__metadata__`
+  skipped) and `summarize_modules` (per-module tensor/param/byte totals +
+  per-category counters, sorted bytes-desc with name tie-break) in
+  `quantui/model_audit.py`.
 - **Model audit classification core `quantui/model_audit.py`** (plan
   2026-08-27, STEP 1.1). Pure-stdlib tensor classifier for safetensors
   headers: `classify_tensor` assigns every tensor exactly one of nine
