@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit exclusion advisor `suggest_exclusions`** (plan 2026-08-27,
+  STEP 2.2). Proposes a starting `exclude_layers` regex covering exactly the
+  2D `.weight` keep-set (`embedding` / `head` / `linear_review`): one
+  alternation of `re.escape`d tensor names, anchored `^…$`, sorted for
+  determinism, safe under the `re.search` semantics of
+  `QuantConfig.excluded`. Returns an `ExclusionSuggestion` with the regex, the
+  covered names, and a per-category rationale. Empty keep-set -> `""`.
 - **Model audit engine `audit_file`** (plan 2026-08-27, STEP 2.1).
   Header-only scan of a `.safetensors` file producing a deterministic
   `AuditReport`: per-category counts/bytes, per-module summaries, total
