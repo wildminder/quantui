@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Fixed
+- **Command palette actions crashed with `AttributeError`** (e.g. "Audit
+  model file": `'Screen' object has no attribute 'action_audit_model'`).
+  Textual 8.2.8 constructs palette providers with the *calling screen*
+  (`app.screen_stack[-2]`), so `QuantCommands.self.screen` was the plain
+  default `Screen` under the palette, not the app — while every action
+  handler lives on `QuantApp`. `QuantCommands._run` / `_palette_run` now
+  dispatch via `self.app`, and `_focus` queries the app DOM
+  (`self.app.query_one`) so focus jumps work even when the palette is
+  opened over a modal. Covered by new headless tests, including a
+  tripwire asserting every palette action exists on `QuantApp`.
+
 ## [0.6.0] - 2026-08-27
 
 ### Added
