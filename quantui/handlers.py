@@ -421,6 +421,58 @@ class HandlersMixin:
             self.query_one("#ctq_output", Input).value = result
             self.auto_suggest_output(Family.COMFY)
 
+    # ---- model audit (plan 2026-08-27, STEP 4.1) -----------------------------
+
+    def _resolve_audit_path(self, raw: str) -> str:
+        """Return a concrete ``.safetensors`` file path for audit, or ``""``.
+
+        Accepts a ``.safetensors`` file directly, or a folder holding exactly one
+        ``.safetensors`` (resolved to that file). Anything else is unusable.
+        """
+        if not raw:
+            return ""
+        if os.path.isfile(raw):
+            return raw if raw.endswith(".safetensors") else ""
+        if os.path.isdir(raw):
+            sts = [f for f in os.listdir(raw) if f.endswith(".safetensors")]
+            if len(sts) == 1:
+                return os.path.join(raw, sts[0])
+        return ""
+
+    def action_audit_model(self) -> None:
+        """Palette: audit a ``.safetensors`` checkpoint (classify + suggest).
+
+        Resolves the target from ``#ctq_input`` when the ComfyUI family tab is
+        active and the input is a ``.safetensors`` file or single-file folder;
+        otherwise opens ``PathModal(file_mode=True)`` first. Then pushes the
+        :class:`screens.AuditScreen` modal.
+        """
+        path = ""
+        if self.family == Family.COMFY:
+            try:
+                raw = self.query_one("#ctq_input", Input).value.strip()
+            except NoMatches:
+                raw = ""
+            path = self._resolve_audit_path(raw)
+        if path:
+            self.push_screen(screens.AuditScreen(path))
+            return
+        try:
+            start = self.query_one("#ctq_input", Input).value.strip()
+        except NoMatches:
+            start = ""
+        self.push_screen(screens.PathModal(start, file_mode=True), self._on_audit_path)
+
+    def _on_audit_path(self, result: str) -> None:
+        """PathModal callback: push the AuditScreen for the chosen file."""
+        if not result:
+            return
+        path = self._resolve_audit_path(result)
+        if not path and result.endswith(".safetensors"):
+            path = result
+        if path:
+            self.push_screen(screens.AuditScreen(path))
+
     def _output_state(self, out: str) -> str:
         """Classify the output field: empty | file_path | dir_path.
 

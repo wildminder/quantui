@@ -8,13 +8,18 @@ Widget ids inside the modal (#tree / #cancel / #use) are preserved exactly.
 
 import os
 
+from textual import work
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    DataTable,
     DirectoryTree,
+    Input,
     Label,
 )
+
+from .model_audit import AuditError, _human_bytes, audit_file, suggest_exclusions
 
 
 class PathModal(ModalScreen):
@@ -181,6 +186,105 @@ class RecentJobsScreen(ModalScreen):
         if 0 <= idx < len(self.records):
             self.dismiss(self.records[idx])
         else:
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class AuditScreen(ModalScreen):
+    """Model-audit modal (plan 2026-08-27, STEP 4.1).
+
+    Runs :func:`quantui.model_audit.audit_file` synchronously in a worker
+    thread (header-only, so it is fast even for huge checkpoints) and posts
+    the result back to the UI: a summary header line, a ``DataTable`` with the
+    per-module table (module / tensors / params / bytes / linears), and the
+    suggested ``exclude_layers`` regex in a read-only, selectable ``Input``
+    (``#audit_suggestion``). On :class:`AuditError` the modal shows the error
+    text instead of a table.
+    """
+
+    BINDINGS = [("escape", "cancel", "Close")]
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.audit_path = path
+
+    def compose(self) -> "object":
+        table = DataTable(id="audit_table")
+        table.cursor_type = "row"
+        yield Vertical(
+            Label(f"Model audit: {os.path.basename(self.audit_path)}", id="audit_title"),
+            Label("", id="audit_summary"),
+            Label("", id="audit_error"),
+            table,
+            Label("Suggested exclude_layers (select to copy):"),
+            # NOTE: Textual 8.2.8's Input has no read_only mode; a plain Input
+            # is used so the regex stays selectable/copyable (the plan's core
+            # requirement). Editing is harmless — the value is advisory.
+            Input(value="", id="audit_suggestion"),
+            Horizontal(
+                Button("Close", id="audit_close"),
+                classes="buttons",
+            ),
+            classes="modal",
+        )
+
+    def on_mount(self) -> None:
+        error_label = self.query_one("#audit_error", Label)
+        error_label.display = False
+        self._run_audit()
+
+    @work(thread=True, exclusive=True, group="audit")
+    def _run_audit(self) -> None:
+        """Worker-thread body: audit the file and post the result to the UI."""
+        try:
+            report = audit_file(self.audit_path)
+            suggestion = suggest_exclusions(report)
+        except AuditError as exc:
+            self.app.call_from_thread(self._show_error, str(exc))
+            return
+        self.app.call_from_thread(self._show_report, report, suggestion)
+
+    def _show_report(self, report, suggestion) -> None:
+        """Main-thread: populate the summary, table, and suggestion box."""
+        total_params = 0
+        for info in report.tensors:
+            params = 1
+            for dim in info.shape:
+                params *= dim
+            total_params += params
+        summary = self.query_one("#audit_summary", Label)
+        summary.update(
+            f"Tensors: {len(report.tensors)} | Params: {total_params:,} | "
+            f"Bytes: {_human_bytes(report.total_bytes)}"
+            + (
+                f" | Quantized layers: {len(report.quantized_layers)}"
+                if report.quantized_layers
+                else ""
+            )
+        )
+        table = self.query_one("#audit_table", DataTable)
+        table.add_columns("module", "tensors", "params", "bytes", "linears")
+        for module in report.modules:
+            table.add_row(
+                module.module,
+                str(module.tensors),
+                f"{module.params:,}",
+                _human_bytes(module.nbytes),
+                str(module.category_counts.get("linear", 0)),
+            )
+        self.query_one("#audit_suggestion", Input).value = suggestion.regex
+
+    def _show_error(self, message: str) -> None:
+        """Main-thread: error state — hide the table, show the error text."""
+        self.query_one("#audit_table", DataTable).display = False
+        error_label = self.query_one("#audit_error", Label)
+        error_label.update(f"Audit failed: {message}")
+        error_label.display = True
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "audit_close":
             self.dismiss(None)
 
     def action_cancel(self) -> None:
