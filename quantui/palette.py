@@ -1,9 +1,14 @@
 """Command-palette provider, extracted from ``quantui/app.py`` [IMP-001 S3B.2].
 
-``QuantCommands`` is moved here verbatim; it stays duck-typed (accesses the
-screen via ``self.screen``, no import of QuantApp) so the module has no
+``QuantCommands`` is moved here verbatim; it stays duck-typed (dispatches
+actions via ``self.app``, no import of QuantApp) so the module has no
 dependency on the app. ``quantui.app`` re-imports the class and keeps the
 post-definition wiring so ``QuantApp.COMMANDS`` still contains it.
+
+Note: Textual 8.2.8 constructs providers with the *calling screen*
+(``app.screen_stack[-2]``), so ``self.screen`` is the plain default
+``Screen`` under the palette — not the app. All action handlers live on
+the app, so dispatch goes through ``self.app``.
 """
 
 from textual.command import DiscoveryHit, Hit, Provider
@@ -60,19 +65,23 @@ class QuantCommands(Provider):
         if action == "_palette_run":
             self._palette_run()
         else:
-            getattr(self.screen, action)()
+            # Handlers live on the app; self.screen is only the calling
+            # screen (a plain Screen in Textual 8.2.8), not the app.
+            getattr(self.app, action)()
 
     def _palette_run(self) -> None:
         # Same morphing entry point as the Run buttons.
-        screen = self.screen
-        if getattr(screen, "_run_active", False):
-            screen.action_stop_run()
+        app = self.app
+        if getattr(app, "_run_active", False):
+            app.action_stop_run()
         else:
-            screen.action_run()
+            app.action_run()
 
     def _focus(self, selector: str) -> None:
         try:
-            widget = self.screen.query_one(selector)
+            # Query the app DOM so focus jumps work even when the palette
+            # was opened over a modal.
+            widget = self.app.query_one(selector)
             widget.focus()
         except NoMatches:
             pass  # target widget not mounted
