@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit TUI: `AuditScreen` modal + "Audit model file" palette
+  command** (plan 2026-08-27, STEP 4.1). The palette command resolves the
+  target from `#ctq_input` (ComfyUI family tab, `.safetensors` file or
+  single-file folder) or opens the file picker first, then pushes the modal:
+  summary header line, per-module DataTable (module / tensors / params /
+  bytes / linears), and the suggested `exclude_layers` regex in a
+  selectable/copyable `#audit_suggestion` Input. The audit runs in a worker
+  thread (`@work(thread=True)`); on `AuditError` the modal shows the error
+  text instead of a table.
 - **Model audit CLI `python -m quantui.model_audit`** (plan 2026-08-27,
   STEP 3.2). `-i <file>` audits a checkpoint and prints the text report
   (exit 0); `--json` prints the JSON report instead; `--out PATH` also writes

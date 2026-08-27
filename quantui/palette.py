@@ -23,6 +23,7 @@ class QuantCommands(Provider):
         ("Save profile", "action_save_profile", "Save current params (Ctrl+S)"),
         ("Show recents", "action_show_recents", "Recent jobs, re-run (Ctrl+R)"),
         ("Run quantization", "_palette_run", "Start a run with current params"),
+        ("Audit model file", "action_audit_model", "Classify tensors + suggest exclusions"),
         ("GGUF family", "action_family_gguf", "Switch to the GGUF family (1)"),
         ("ComfyUI family", "action_family_comfy", "Switch to ComfyUI family (2)"),
     ]
