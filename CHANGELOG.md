@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **PathModal path entry + Windows drive quick-jump.** `DirectoryTree` cannot
+  navigate above its root, so on Windows a picker opened with an empty/relative
+  start was trapped in one drive and could never reach `X:\_Models` or `D:\`.
+  The modal now has a path-entry `Input` (`#path_entry`, pre-filled with the
+  start path): Enter on an existing directory re-roots the tree there, in file
+  mode Enter on an existing file selects it and enables `Use Selected`, and
+  nonexistent paths are ignored. On Windows only, a row of drive quick-jump
+  buttons (`#drive_<d>` per existing drive letter) re-roots the tree at
+  `<d>:\`; selecting a directory in the tree syncs its path back into the
+  entry. Covered by new headless tests (`tests/test_path_modal_drives.py`).
+
 ### Fixed
 - **Command palette actions crashed with `AttributeError`** (e.g. "Audit
   model file": `'Screen' object has no attribute 'action_audit_model'`).
