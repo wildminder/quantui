@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Sharded model folder support for the audit.** `model_audit` now audits
+  HuggingFace sharded models directly — no merge step needed. New
+  `audit_sharded_folder(path)` reads `model.safetensors.index.json`, scans
+  every referenced shard header-only, and merges them into one `AuditReport`
+  (tensors deduplicated by name in sorted-shard order, `quantized_layers`
+  concatenated, metadata from the index's `"metadata"` key or the first
+  shard's `__metadata__`). New `audit(path)` dispatcher routes single files
+  to `audit_file` and sharded folders to `audit_sharded_folder`; the CLI
+  (`python -m quantui.model_audit -i`), the `AuditScreen` modal, and the
+  inline Audit button (`_resolve_audit_path`) all accept sharded folders now.
+  Missing index, missing shard, malformed JSON, and malformed shard headers
+  raise `AuditError` naming the offending path. Covered by
+  `tests/test_model_audit_sharded.py` (12 tests, pure-stdlib fixtures).
 - **Inline Audit button on the ComfyUI input row.** Auditing no longer requires
   Ctrl+P → "Audit model file": a small `Audit` button (`#audit_ctq_in`) now
   sits next to Browse on the `#ctq_input` row. It starts disabled and is

@@ -327,6 +327,123 @@ def audit_file(path: str) -> AuditReport:
 
 
 # --------------------------------------------------------------------------- #
+# Sharded model folder audit (HuggingFace model.safetensors.index.json).
+# --------------------------------------------------------------------------- #
+SHARDED_INDEX_NAME = "model.safetensors.index.json"
+
+
+def audit_sharded_folder(path: str) -> AuditReport:
+    """Scan a HuggingFace sharded model folder header-only and merge the shards.
+
+    A sharded model is a folder containing ``model.safetensors.index.json``
+    (the index: ``{"weight_map": {tensor_name: shard_filename, ...}}`` plus an
+    optional ``"metadata"`` object) and one or more shard ``.safetensors``
+    files. Every shard is scanned exactly like :func:`audit_file` (header +
+    ``.comfy_quant`` blobs only -- never tensor payloads) and the results are
+    merged into a single :class:`AuditReport` whose ``path`` is the folder:
+
+    * tensors are merged in sorted-shard order, deduplicated by name (if a
+      tensor appears in multiple shards, the first occurrence wins);
+    * ``quantized_layers`` are concatenated in sorted-shard order;
+    * ``metadata`` comes from the index's ``"metadata"`` key when present,
+      else from the first shard (sorted order) carrying ``__metadata__``.
+
+    Raises :class:`AuditError` (message names the offending path) for a
+    missing index file, malformed index JSON, a shard file referenced by the
+    index but absent on disk, or a malformed safetensors header /
+    ``.comfy_quant`` descriptor in any shard.
+    """
+    index_path = os.path.join(path, SHARDED_INDEX_NAME)
+    if not os.path.isfile(index_path):
+        raise AuditError(
+            f"{path}: missing {SHARDED_INDEX_NAME} (not a sharded model folder)"
+        )
+    try:
+        with open(index_path, encoding="utf-8") as fh:
+            index = json.load(fh)
+    except OSError as exc:
+        raise AuditError(f"{index_path}: cannot read index file: {exc}") from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise AuditError(f"{index_path}: malformed index JSON: {exc}") from exc
+    if not isinstance(index, dict) or not isinstance(index.get("weight_map"), dict):
+        raise AuditError(f"{index_path}: malformed index (missing 'weight_map' object)")
+
+    shards = sorted({str(shard) for shard in index["weight_map"].values()})
+
+    merged_tensors: list[TensorInfo] = []
+    seen_names: set[str] = set()
+    quantized_layers: list[tuple[str, dict]] = []
+    shard_metadata: dict = {}
+    for shard in shards:
+        shard_path = os.path.join(path, shard)
+        if not os.path.isfile(shard_path):
+            raise AuditError(f"{path}: index references missing shard file: {shard}")
+        try:
+            header, _data_start = comfy_quant_schema.read_safetensors_header(shard_path)
+        except OSError as exc:
+            raise AuditError(f"{shard_path}: cannot read file: {exc}") from exc
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError, MemoryError, OverflowError) as exc:
+            raise AuditError(f"{shard_path}: not a valid safetensors file: {exc}") from exc
+        for info in collect_tensors(header):
+            if info.name not in seen_names:
+                seen_names.add(info.name)
+                merged_tensors.append(info)
+        if not shard_metadata:
+            meta = header.get("__metadata__")
+            if meta:
+                shard_metadata = dict(meta)
+        try:
+            quantized_layers.extend(comfy_quant_schema.read_comfy_quant_configs(shard_path))
+        except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise AuditError(f"{shard_path}: malformed .comfy_quant descriptor: {exc}") from exc
+
+    if "metadata" in index and isinstance(index["metadata"], dict):
+        metadata = dict(index["metadata"])
+    else:
+        metadata = shard_metadata
+
+    category_counts: dict[str, int] = {}
+    category_bytes: dict[str, int] = {}
+    total_bytes = 0
+    for info in merged_tensors:
+        category_counts[info.category] = category_counts.get(info.category, 0) + 1
+        category_bytes[info.category] = category_bytes.get(info.category, 0) + info.nbytes
+        total_bytes += info.nbytes
+
+    histogram: dict[str, int] = {}
+    for _prefix, config in quantized_layers:
+        fmt = str(config.get("format", "<missing>"))
+        histogram[fmt] = histogram.get(fmt, 0) + 1
+
+    return AuditReport(
+        path=path,
+        metadata=metadata,
+        tensors=merged_tensors,
+        category_counts=category_counts,
+        category_bytes=category_bytes,
+        modules=summarize_modules(merged_tensors),
+        quantized_layers=quantized_layers,
+        quant_format_histogram=histogram,
+        total_bytes=total_bytes,
+    )
+
+
+def audit(path: str) -> AuditReport:
+    """Audit dispatcher: single ``.safetensors`` file or sharded model folder.
+
+    * existing file -> :func:`audit_file`;
+    * existing folder holding ``model.safetensors.index.json`` ->
+      :func:`audit_sharded_folder`;
+    * anything else -> :class:`AuditError`.
+    """
+    if os.path.isfile(path):
+        return audit_file(path)
+    if os.path.isdir(path) and os.path.isfile(os.path.join(path, SHARDED_INDEX_NAME)):
+        return audit_sharded_folder(path)
+    raise AuditError(f"{path}: not a .safetensors file or sharded model folder")
+
+
+# --------------------------------------------------------------------------- #
 # Exclusion suggestion (plan STEP 2.2).
 # --------------------------------------------------------------------------- #
 # ctq quantizes only 2D ``.weight`` tensors, so the suggested regex only needs
@@ -492,7 +609,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "layers, and propose a starting exclude_layers regex."
         ),
     )
-    parser.add_argument("-i", "--input", required=True, help="path to the .safetensors file")
+    parser.add_argument(
+        "-i", "--input", required=True,
+        help="path to a .safetensors file or a sharded model folder",
+    )
     parser.add_argument("--json", action="store_true", help="emit the JSON report instead of text")
     parser.add_argument(
         "--out",
@@ -506,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns the process exit code (0 ok, 2 audit error)."""
     args = _build_parser().parse_args(argv)
     try:
-        report = audit_file(args.input)
+        report = audit(args.input)
     except AuditError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

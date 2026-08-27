@@ -449,10 +449,12 @@ class HandlersMixin:
     # ---- model audit (plan 2026-08-27, STEP 4.1) -----------------------------
 
     def _resolve_audit_path(self, raw: str) -> str:
-        """Return a concrete ``.safetensors`` file path for audit, or ``""``.
+        """Return a concrete auditable path for audit, or ``""``.
 
-        Accepts a ``.safetensors`` file directly, or a folder holding exactly one
-        ``.safetensors`` (resolved to that file). Anything else is unusable.
+        Accepts a ``.safetensors`` file directly, a folder holding exactly one
+        ``.safetensors`` (resolved to that file), or a HuggingFace sharded
+        model folder (``model.safetensors.index.json`` present -- the folder
+        itself is the audit target). Anything else is unusable.
         """
         if not raw:
             return ""
@@ -462,6 +464,8 @@ class HandlersMixin:
             sts = [f for f in os.listdir(raw) if f.endswith(".safetensors")]
             if len(sts) == 1:
                 return os.path.join(raw, sts[0])
+            if os.path.isfile(os.path.join(raw, "model.safetensors.index.json")):
+                return raw
         return ""
 
     def action_audit_model(self) -> None:
