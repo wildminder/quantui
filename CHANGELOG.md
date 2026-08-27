@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- **Audit classifier recognizes `linear1`/`linear2` FFN weights.** Added to
+  `LINEAR_SEGMENTS` after the VibeVoice-7B audit surfaced 156 unambiguous FFN
+  matmul weights (`*.ffn.linear1/linear2.weight` in the acoustic/semantic
+  tokenizers) landing in `linear_review` and bloating the suggested
+  `exclude_layers` regex from 11 to 167 names. Breeze uses neither name, so the
+  live golden tests are unaffected; the VibeVoice keep-set now collapses to the
+  11 genuinely review-worthy tensors (embedding, head, and the small
+  diffusion-head projections/modulations).
+
 ### Added
 - **Sharded model folder support for the audit.** `model_audit` now audits
   HuggingFace sharded models directly — no merge step needed. New

@@ -70,6 +70,8 @@ LINEAR_SEGMENTS: frozenset[str] = frozenset(
         "fc2",
         "dense",
         "linear",
+        "linear1",
+        "linear2",
         "mlp",
     }
 )
