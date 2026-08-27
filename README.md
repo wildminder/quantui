@@ -155,6 +155,7 @@ modules. Only `app.py`, `panels.py`, `screens.py`, and `handlers.py` import
 | `quantui/worker_ctq_kitchen.py` | **comfy-kitchen** worker (W4A4 `convrot_w4a4`, W4A8 `asym_w4a8_int8`). Runs in a ComfyUI-python interpreter. |
 | `quantui/dtype_cast.py` | Pure bit-exact RTNE dtype-cast core + streaming cast writer (F32/F64 ↔ BF16/F16; no numpy/torch). |
 | `quantui/comfy_quant_schema.py` | Pure-stdlib `.comfy_quant` schema validator + serializer (no torch/safetensors import). |
+| `quantui/model_audit.py` | Pure-stdlib model audit: header-only tensor classifier + per-module aggregation + `exclude_layers` suggestion + text/JSON renderers + CLI (no torch/safetensors/numpy). |
 
 ### ComfyUI backend requirements
 
@@ -274,6 +275,73 @@ checkpoint).
 > `quantui/quant_validator.py` reuses the pure-stdlib header parser in
 > `quantui/comfy_quant_schema.py`, so the structural pass needs neither `torch`
 > nor `safetensors`.
+
+## Model audit (tensor inventory + exclusion advisor)
+
+The **model audit tool** automates *stage 1* of the quantization-exclusion
+funnel: point it at a `.safetensors` checkpoint and it classifies every tensor,
+aggregates per-module statistics, detects already-quantized layers, and proposes
+a starting `exclude_layers` regex for the unified INT8 format.
+
+It is a **header-only** scan — it reads only the safetensors header (and the
+tiny `.comfy_quant` JSON descriptor blobs), never the tensor payloads — so a
+7 GiB checkpoint is inventoried in milliseconds without loading it into RAM.
+The core (`quantui/model_audit.py`) is pure stdlib (no torch / safetensors /
+numpy), so it runs in the headless test env and any worker env.
+
+**What it does — and deliberately does not do.** The tool produces the
+*inventory* for stage 2 but does **not** attempt stage 2 itself: call-frequency
+and GEMM shape cannot be inferred from a checkpoint, so hot-loop / skinny-GEMM
+exclusions remain a human decision after reading the pipeline code. The tool
+suggests, the human decides. It is strictly read-only (never modifies a file)
+and supports safetensors only (no GGUF).
+
+### CLI usage
+
+```bash
+python -m quantui.model_audit -i <file.safetensors>            # text report to stdout
+python -m quantui.model_audit -i <file.safetensors> --json     # JSON report instead
+python -m quantui.model_audit -i <file.safetensors> --out report.json
+```
+
+`--out PATH` also writes the report to PATH (parents created) while still
+echoing it to stdout. Missing or malformed input prints a message naming the
+path on stderr and exits 2.
+
+### TUI usage
+
+Open the command palette (Ctrl+P) and run **"Audit model file"**. The command
+resolves the target from the `#ctq_input` field when the ComfyUI family tab is
+active and the input is a `.safetensors` file or a single-file folder; otherwise
+it opens the file picker first. The resulting modal shows a summary header line,
+a per-module table (module / tensors / params / bytes / linears), and the
+suggested `exclude_layers` regex in a selectable/copyable box. Auditing a
+checkpoint that is already kitchen-quantized additionally reports the
+quantized-layer count, the per-format histogram, and the unquantized 2D
+`.weight` remainder (the effective exclusion set of the existing build).
+
+### What the suggestion covers
+
+The suggested regex covers exactly the 2D `.weight` tensors that ctq would
+otherwise quantize but that should be kept: **embeddings**, **heads**, and
+unknown-role 2D weights (`linear_review`). Vectors, biases, 3D+ conv weights,
+and the kitchen companion tensors are never touched by ctq, so they need no
+entry. The regex is one anchored alternation of `re.escape`d, sorted tensor
+names (`^(a|b|c)$`), safe under the `re.search` semantics of
+`QuantConfig.excluded`. An empty keep-set yields an empty suggestion.
+
+### Worked example (Breeze-TTS-2 hybrid recipe)
+
+Auditing `Breeze-TTS-2-bf16.safetensors` (1115 tensors) classifies to
+`linear 558 · vector 424 · bias 60 · other 67 · embedding 4 · head 1 ·
+linear_review 1`, with per-module linears `backbone_model 196 · text_encoder
+182 · depth_decoder 84 · codec_model 96`. The tool's suggestion covers the six
+2D keep-tensors (the four embeddings, `lm_head.weight`, and
+`text_encoder_proj.weight`). After reading the pipeline you learn the depth
+decoder runs in a hot loop and the codec model is never instantiated at
+inference, so you extend the regex with `^depth_decoder\.` (and optionally
+`^codec_model\.`) — quantizing exactly `backbone_model` + `text_encoder` (378
+tensors), which is precisely what the official `int8-hybrid` build did.
 
 ### Determinism
 

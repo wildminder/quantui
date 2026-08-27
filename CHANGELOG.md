@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-27
+
 ### Added
 - **Model audit TUI: `AuditScreen` modal + "Audit model file" palette
   command** (plan 2026-08-27, STEP 4.1). The palette command resolves the
