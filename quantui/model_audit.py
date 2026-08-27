@@ -28,10 +28,12 @@ tests in ``tests/test_model_audit_classify.py`` are tripwires).
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
 import re
+import sys
 from dataclasses import dataclass
 
 from quantui import comfy_quant_schema
@@ -476,3 +478,48 @@ def render_json(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
         },
     }
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# CLI entry point (plan STEP 3.2): python -m quantui.model_audit
+# --------------------------------------------------------------------------- #
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m quantui.model_audit",
+        description=(
+            "Header-only audit of a .safetensors checkpoint: classify every "
+            "tensor, aggregate per-module stats, detect already-quantized "
+            "layers, and propose a starting exclude_layers regex."
+        ),
+    )
+    parser.add_argument("-i", "--input", required=True, help="path to the .safetensors file")
+    parser.add_argument("--json", action="store_true", help="emit the JSON report instead of text")
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="also write the report to this path (parents created); still echoed to stdout",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point. Returns the process exit code (0 ok, 2 audit error)."""
+    args = _build_parser().parse_args(argv)
+    try:
+        report = audit_file(args.input)
+    except AuditError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    suggestion = suggest_exclusions(report)
+    payload = render_json(report, suggestion) if args.json else render_text(report, suggestion)
+    if args.out:
+        out_dir = os.path.dirname(os.path.abspath(args.out))
+        os.makedirs(out_dir, exist_ok=True)
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+    sys.stdout.write(payload)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

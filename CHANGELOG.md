@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit CLI `python -m quantui.model_audit`** (plan 2026-08-27,
+  STEP 3.2). `-i <file>` audits a checkpoint and prints the text report
+  (exit 0); `--json` prints the JSON report instead; `--out PATH` also writes
+  the report to PATH (parents created) while still echoing to stdout. Missing
+  or malformed input prints a message naming the path on stderr and exits 2.
+  Subprocess-tested; a dedicated test proves the module never imports
+  torch/safetensors/numpy (they are asserted absent from `sys.modules` after a
+  full audit run).
 - **Model audit report renderers** (plan 2026-08-27, STEP 3.1).
   `render_text` (fixed layout: title, totals with human-readable bytes,
   category table, per-module table bytes-desc, quantized section only when
