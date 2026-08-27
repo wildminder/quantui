@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit report renderers** (plan 2026-08-27, STEP 3.1).
+  `render_text` (fixed layout: title, totals with human-readable bytes,
+  category table, per-module table bytes-desc, quantized section only when
+  present, and the suggested regex on its own `exclude_layers:` line plus the
+  stage-1/stage-2 boundary note) and `render_json`
+  (`indent=2, sort_keys=True`, byte-stable across runs) in
+  `quantui/model_audit.py`.
 - **Model audit exclusion advisor `suggest_exclusions`** (plan 2026-08-27,
   STEP 2.2). Proposes a starting `exclude_layers` regex covering exactly the
   2D `.weight` keep-set (`embedding` / `head` / `linear_review`): one
