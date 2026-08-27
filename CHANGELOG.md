@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **Model audit classification core `quantui/model_audit.py`** (plan
+  2026-08-27, STEP 1.1). Pure-stdlib tensor classifier for safetensors
+  headers: `classify_tensor` assigns every tensor exactly one of nine
+  categories (`linear` / `embedding` / `head` / `linear_review` / `vector` /
+  `bias` / `quant_meta` / `quant_scale` / `other`) via the frozen rule table
+  validated against the real Breeze-TTS-2 checkpoints (1115 tensors, zero
+  false negatives vs. the official 378-tensor int8-hybrid build). Includes
+  the frozen `LINEAR_SEGMENTS` set, the `DTYPE_ITEMSIZE` table, and
+  `tensor_bytes`. Tripwire tests freeze the table in
+  `tests/test_model_audit_classify.py`.
+
 ## [0.5.0] - 2026-08-27
 
 ### Added
