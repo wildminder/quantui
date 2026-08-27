@@ -39,7 +39,7 @@ def test_palette_focus_jumps_present():
 
 async def test_app_has_quant_commands_registered():
     a = appmod.QuantApp()
-    async with a.run_test() as pilot:
+    async with a.run_test() as _pilot:
         from quantui.app import QuantCommands as QC
 
         assert any(
