@@ -184,6 +184,7 @@ class HandlersMixin:
         """Live .pt detection while the user types/pastes into #ctq_input."""
         if getattr(event.input, "id", "") == "ctq_input":
             self.update_pt_suggest()
+            self.update_audit_button()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         iid = event.input.id
@@ -194,6 +195,7 @@ class HandlersMixin:
             # The output-mode radio only applies to sharded inputs; re-evaluate.
             self.refresh_ctq_visibility()
             self.update_pt_suggest()
+            self.update_audit_button()
         elif iid == "ctq_output":
             self.auto_suggest_output(Family.COMFY)
         elif iid == "pybin_ctq":
@@ -222,6 +224,7 @@ class HandlersMixin:
         if iid == "ctq_input":
             self.refresh_ctq_visibility()
             self.update_pt_suggest()
+            self.update_audit_button()
         message = self.REQUIRED_FIELDS.get(iid)
         if message is None:
             return  # not a required field
@@ -259,6 +262,8 @@ class HandlersMixin:
             self.push_screen(screens.PathModal(self.query_one("#output", Input).value), self.set_out)
         elif b == "browse_ctq_in":
             self.push_screen(screens.PathModal(self.query_one("#ctq_input", Input).value, file_mode=True), self.set_ctq_model)
+        elif b == "audit_ctq_in":
+            self.action_audit_model()
         elif b == "browse_ctq_out":
             self.push_screen(screens.PathModal(self.query_one("#ctq_output", Input).value), self.set_ctq_out)
         elif b == "browse_validate_in":
@@ -337,6 +342,7 @@ class HandlersMixin:
             # The output-mode radio only applies to sharded inputs; re-evaluate.
             self.refresh_ctq_visibility()
             self.update_pt_suggest()
+            self.update_audit_button()
 
     # ---- .pt suggestion box (user feature) ------------------------------------
 
@@ -352,6 +358,24 @@ class HandlersMixin:
             inp = self.query_one("#ctq_input", Input).value.strip()
             box.display = pt_convert.is_pt_file(inp)
         except NoMatches:  # boundary: panel not mounted (e.g. GGUF family)
+            pass
+
+    def update_audit_button(self) -> None:
+        """Enable the inline Audit button iff #ctq_input holds an auditable path.
+
+        Mirrors the resolution rule of :meth:`action_audit_model`: the button
+        is enabled exactly when :meth:`_resolve_audit_path` finds a concrete
+        target for the typed value. Called at every site that reacts to
+        ``#ctq_input`` changes (same sites as ``update_pt_suggest``).
+        """
+        try:
+            raw = self.query_one("#ctq_input", Input).value.strip()
+        except NoMatches:  # boundary: panel not mounted (e.g. GGUF family)
+            return
+        enabled = bool(self._resolve_audit_path(raw))
+        try:
+            self.query_one("#audit_ctq_in", Button).disabled = not enabled
+        except NoMatches:  # boundary: button not mounted
             pass
 
     def action_convert_pt(self) -> None:
@@ -371,6 +395,7 @@ class HandlersMixin:
             self.query_one("#ctq_input", Input).value = out
             self.auto_suggest_output(Family.COMFY)
             self.update_pt_suggest()
+            self.update_audit_button()
             self.refresh_ctq_visibility()
             self.set_status("Ready.")
             self.emit_toast("Checkpoint converted to safetensors.", "information")
