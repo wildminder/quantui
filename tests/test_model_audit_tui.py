@@ -6,7 +6,7 @@ thread inside :class:`AuditScreen`; tests wait on ``app.workers`` before
 asserting so the thread-posted result is deterministically applied.
 """
 
-from textual.widgets import DataTable, Input
+from textual.widgets import Button, DataTable, Input
 
 from quantui import app as appmod
 from quantui.app import QuantCommands
@@ -114,3 +114,59 @@ async def test_action_audit_empty_input_opens_path_modal():
 
         top = a.screen_stack[-1]
         assert isinstance(top, PathModal)
+
+
+# --------------------------------------------------------------------------- #
+# Inline Audit button on the ComfyUI input row (#audit_ctq_in)
+# --------------------------------------------------------------------------- #
+async def test_audit_button_present_and_initially_disabled():
+    """The inline Audit button exists and starts disabled (empty input)."""
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        _switch_family(a, Family.COMFY)
+        await pilot.pause()
+        button = a.query_one("#audit_ctq_in", Button)
+        assert button.disabled is True
+
+
+async def test_audit_button_enables_on_auditable_path(tmp_path):
+    """update_audit_button enables the button iff the typed path is auditable."""
+    fixture = _write_fixture(tmp_path)
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        _switch_family(a, Family.COMFY)
+        await pilot.pause()
+        button = a.query_one("#audit_ctq_in", Button)
+        entry = a.query_one("#ctq_input", Input)
+
+        entry.value = fixture
+        a.update_audit_button()
+        await pilot.pause()
+        assert button.disabled is False
+
+        entry.value = str(tmp_path / "no_such_file.safetensors")
+        a.update_audit_button()
+        await pilot.pause()
+        assert button.disabled is True
+
+
+async def test_audit_button_click_pushes_audit_screen(tmp_path):
+    """Pressing the enabled inline Audit button pushes the AuditScreen."""
+    fixture = _write_fixture(tmp_path)
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        _switch_family(a, Family.COMFY)
+        await pilot.pause()
+        entry = a.query_one("#ctq_input", Input)
+        entry.value = fixture
+        a.update_audit_button()
+        await pilot.pause()
+
+        button = a.query_one("#audit_ctq_in", Button)
+        assert button.disabled is False
+        button.press()
+        await pilot.pause()
+
+        top = a.screen_stack[-1]
+        assert isinstance(top, AuditScreen)
+        assert top.audit_path == fixture

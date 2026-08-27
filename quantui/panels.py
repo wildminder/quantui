@@ -391,7 +391,7 @@ def build_gguf_panel() -> VerticalScroll:
 def build_comfy_panel() -> VerticalScroll:
     """ComfyUI panel, rendered data-driven from the registry schema.
 
-    Widget ids are stable for tests: #ctq_input, #ctq_output, #ctq_format,
+    Widget ids are stable for tests: #ctq_input, #audit_ctq_in, #ctq_output, #ctq_format,
     #ctq_preset, #ctq_comfy_quant, #ctq_save_quant_metadata, #ctq_simple,
     #ctq_low_memory, #ctq_calib_samples, #pybin_ctq, #ctq_cap_warn, plus the
     conditional option widgets (#scaling_mode / #block_size / #convrot /
@@ -401,7 +401,8 @@ def build_comfy_panel() -> VerticalScroll:
     return VerticalScroll(
         Label("1. Input: a single .safetensors file, a folder with one, or a HuggingFace sharded folder (model.safetensors.index.json)"),
         Horizontal(Input(id="ctq_input", placeholder="/path/to/model.safetensors or /path/to/hf-model-folder"),
-                   Button("Browse", id="browse_ctq_in"), classes="field"),
+                   Button("Browse", id="browse_ctq_in"),
+                   Button("Audit", id="audit_ctq_in", disabled=True), classes="field"),
         # .pt suggestion (user feature): hidden until the input is a .pt/.pth/.ckpt.
         PtSuggestBox(),
         Label("2. Output: a .safetensors file (single) OR a folder (HuggingFace sharded output)"),

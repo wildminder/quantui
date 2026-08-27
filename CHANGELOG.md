@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Inline Audit button on the ComfyUI input row.** Auditing no longer requires
+  Ctrl+P → "Audit model file": a small `Audit` button (`#audit_ctq_in`) now
+  sits next to Browse on the `#ctq_input` row. It starts disabled and is
+  enabled live (via `HandlersMixin.update_audit_button`, refreshed at every
+  `#ctq_input` change site alongside `update_pt_suggest`) exactly when the
+  typed path resolves to an auditable target; pressing it pushes the
+  `AuditScreen` directly. Covered by new headless tests in
+  `tests/test_model_audit_tui.py`.
 - **PathModal path entry + Windows drive quick-jump.** `DirectoryTree` cannot
   navigate above its root, so on Windows a picker opened with an empty/relative
   start was trapped in one drive and could never reach `X:\_Models` or `D:\`.
