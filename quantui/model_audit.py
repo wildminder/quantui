@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from dataclasses import dataclass
 
@@ -366,3 +367,112 @@ def suggest_exclusions(report: AuditReport) -> ExclusionSuggestion:
         return ExclusionSuggestion(regex="", names=(), rationale={})
     regex = "^(" + "|".join(re.escape(name) for name in keep) + ")$"
     return ExclusionSuggestion(regex=regex, names=tuple(keep), rationale=rationale)
+
+
+# --------------------------------------------------------------------------- #
+# Report renderers (plan STEP 3.1).
+# --------------------------------------------------------------------------- #
+def _human_bytes(nbytes: int) -> str:
+    """Render a byte count human-readable with 2 decimals (B / KiB / MiB / GiB / TiB)."""
+    value = float(nbytes)
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if value < 1024.0:
+            return f"{value:.2f} {unit}"
+        value /= 1024.0
+    return f"{value:.2f} TiB"
+
+
+def _total_params(report: AuditReport) -> int:
+    return sum(math.prod(info.shape) for info in report.tensors)
+
+
+def render_text(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
+    """Render the fixed-layout plain-text audit report.
+
+    Layout (asserted by tests): title line with the file name; totals line
+    (tensors / params / bytes human-readable); category table; per-module
+    table in bytes-desc order; a "Quantized layers" section only when the file
+    carries ``.comfy_quant`` descriptors; and the suggestion section with the
+    regex on its own line prefixed ``exclude_layers: ``. The closing note
+    states the stage-1/stage-2 boundary explicitly.
+    """
+    lines: list[str] = []
+    lines.append(f"Model audit: {os.path.basename(report.path)}")
+    lines.append(
+        f"Tensors: {len(report.tensors)} | Params: {_total_params(report):,} | "
+        f"Bytes: {_human_bytes(report.total_bytes)}"
+    )
+    lines.append("")
+    lines.append("Categories:")
+    for category in CATEGORIES:
+        count = report.category_counts.get(category, 0)
+        if count == 0:
+            continue
+        lines.append(
+            f"  {category:<14} {count:>6} tensors  {_human_bytes(report.category_bytes.get(category, 0)):>12}"
+        )
+    lines.append("")
+    lines.append("Modules:")
+    lines.append(f"  {'module':<24} {'tensors':>8} {'params':>14} {'bytes':>12} {'linears':>8}")
+    for summary in report.modules:
+        linears = summary.category_counts.get("linear", 0)
+        lines.append(
+            f"  {summary.module:<24} {summary.tensors:>8} {summary.params:>14,} "
+            f"{_human_bytes(summary.nbytes):>12} {linears:>8}"
+        )
+    if report.quantized_layers:
+        lines.append("")
+        lines.append(f"Quantized layers: {len(report.quantized_layers)}")
+        for fmt in sorted(report.quant_format_histogram):
+            lines.append(f"  {fmt}: {report.quant_format_histogram[fmt]}")
+    lines.append("")
+    lines.append("Suggested exclude_layers (stage-1 keep-set only):")
+    if suggestion.regex:
+        lines.append(f"exclude_layers: {suggestion.regex}")
+        for category in sorted(suggestion.rationale):
+            lines.append(f"  {category}: {suggestion.rationale[category]}")
+    else:
+        lines.append("exclude_layers: (none needed — no 2D keep-set tensors found)")
+    lines.append("")
+    lines.append(
+        "Note: this regex covers header-level keeps only (embeddings / heads / "
+        "unknown-role 2D weights). Hot-loop and skinny-GEMM exclusions are "
+        "stage-2 decisions — read the pipeline code; the tool suggests, the human decides."
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_json(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
+    """Render the audit report as stable JSON (``indent=2, sort_keys=True``)."""
+    payload = {
+        "path": report.path,
+        "metadata": report.metadata,
+        "totals": {
+            "tensors": len(report.tensors),
+            "params": _total_params(report),
+            "bytes": report.total_bytes,
+        },
+        "category_counts": report.category_counts,
+        "category_bytes": report.category_bytes,
+        "modules": [
+            {
+                "module": summary.module,
+                "tensors": summary.tensors,
+                "params": summary.params,
+                "bytes": summary.nbytes,
+                "category_counts": summary.category_counts,
+            }
+            for summary in report.modules
+        ],
+        "quantized_layers": [
+            {"prefix": prefix, "config": config}
+            for prefix, config in report.quantized_layers
+        ],
+        "quant_format_histogram": report.quant_format_histogram,
+        "suggestion": {
+            "regex": suggestion.regex,
+            "names": list(suggestion.names),
+            "rationale": suggestion.rationale,
+        },
+    }
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
