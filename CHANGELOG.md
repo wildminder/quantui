@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Model audit engine `audit_file`** (plan 2026-08-27, STEP 2.1).
+  Header-only scan of a `.safetensors` file producing a deterministic
+  `AuditReport`: per-category counts/bytes, per-module summaries, total
+  bytes, `__metadata__` verbatim, and already-quantized layer detection via
+  `comfy_quant_schema.read_comfy_quant_configs` with a per-format histogram.
+  Malformed input (missing file, garbage bytes, truncated header, bad
+  `.comfy_quant` JSON) raises `AuditError` naming the path. No tensor payload
+  is ever read — a 7 GiB checkpoint scans in milliseconds.
 - **Model audit module grouping + aggregation** (plan 2026-08-27, STEP 1.2).
   `TensorInfo` (frozen per-tensor record), `module_of` (top-level prefix),
   `collect_tensors` (header -> classified, name-sorted infos, `__metadata__`

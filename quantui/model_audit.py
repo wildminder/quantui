@@ -28,9 +28,12 @@ tests in ``tests/test_model_audit_classify.py`` are tripwires).
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass
+
+from quantui import comfy_quant_schema
 
 # --------------------------------------------------------------------------- #
 # Category vocabulary -- every tensor gets exactly one of these.
@@ -241,3 +244,80 @@ def summarize_modules(infos: list[TensorInfo]) -> list[ModuleSummary]:
             summary.category_counts.get(info.category, 0) + 1
         )
     return sorted(per_module.values(), key=lambda s: (-s.nbytes, s.module))
+
+
+# --------------------------------------------------------------------------- #
+# File-level audit engine (plan STEP 2.1).
+# --------------------------------------------------------------------------- #
+class AuditError(ValueError):
+    """Raised for malformed / unreadable safetensors input (message names the path)."""
+
+
+@dataclass
+class AuditReport:
+    """Complete, deterministic inventory of one safetensors file."""
+
+    path: str
+    metadata: dict  # __metadata__ verbatim ({} if absent)
+    tensors: list[TensorInfo]
+    category_counts: dict[str, int]
+    category_bytes: dict[str, int]
+    modules: list[ModuleSummary]
+    quantized_layers: list[tuple[str, dict]]  # (prefix, comfy_quant config)
+    quant_format_histogram: dict[str, int]
+    total_bytes: int
+
+
+def audit_file(path: str) -> AuditReport:
+    """Scan a ``.safetensors`` file header-only and build the full inventory.
+
+    Reuses :mod:`quantui.comfy_quant_schema` for all on-disk parsing (no
+    duplicate parser): ``read_safetensors_header`` for the header and
+    ``read_comfy_quant_configs`` for the ``.comfy_quant`` JSON blobs. Only the
+    header and the tiny descriptor blobs are read -- never tensor payloads --
+    so a 7 GiB checkpoint is scanned in milliseconds without loading it.
+
+    Raises :class:`AuditError` (message contains ``path``) for missing files,
+    non-safetensors bytes, truncated headers, or malformed ``.comfy_quant``
+    JSON.
+    """
+    try:
+        header, _data_start = comfy_quant_schema.read_safetensors_header(path)
+    except OSError as exc:
+        raise AuditError(f"{path}: cannot read file: {exc}") from exc
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError, MemoryError, OverflowError) as exc:
+        # MemoryError/OverflowError: garbage first 8 bytes decode as an absurd
+        # header length before the truncation check can fire.
+        raise AuditError(f"{path}: not a valid safetensors file: {exc}") from exc
+
+    tensors = collect_tensors(header)
+
+    category_counts: dict[str, int] = {}
+    category_bytes: dict[str, int] = {}
+    total_bytes = 0
+    for info in tensors:
+        category_counts[info.category] = category_counts.get(info.category, 0) + 1
+        category_bytes[info.category] = category_bytes.get(info.category, 0) + info.nbytes
+        total_bytes += info.nbytes
+
+    try:
+        quantized_layers = comfy_quant_schema.read_comfy_quant_configs(path)
+    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise AuditError(f"{path}: malformed .comfy_quant descriptor: {exc}") from exc
+
+    histogram: dict[str, int] = {}
+    for _prefix, config in quantized_layers:
+        fmt = str(config.get("format", "<missing>"))
+        histogram[fmt] = histogram.get(fmt, 0) + 1
+
+    return AuditReport(
+        path=path,
+        metadata=dict(header.get("__metadata__") or {}),
+        tensors=tensors,
+        category_counts=category_counts,
+        category_bytes=category_bytes,
+        modules=summarize_modules(tensors),
+        quantized_layers=quantized_layers,
+        quant_format_histogram=histogram,
+        total_bytes=total_bytes,
+    )
