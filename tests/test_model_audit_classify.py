@@ -34,6 +34,10 @@ def test_categories_frozen():
 
 def test_linear_segments_frozen():
     # Exact validated set from plan §0.2 — adding a segment is a reviewed act.
+    # linear1/linear2 added 2026-08-27 after the VibeVoice-7B audit: they are
+    # unambiguous FFN matmul weights (acoustic/semantic tokenizer ffn.linear1/2)
+    # that the original Breeze-validated set did not cover. Breeze uses neither
+    # name, so the live golden tests are unaffected.
     assert LINEAR_SEGMENTS == frozenset(
         {
             "q_proj",
@@ -49,6 +53,8 @@ def test_linear_segments_frozen():
             "fc2",
             "dense",
             "linear",
+            "linear1",
+            "linear2",
             "mlp",
         }
     )
