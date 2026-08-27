@@ -3,10 +3,14 @@
 ``PathModal`` is moved verbatim from ``app.py`` -- a folder/file picker built on
 ``DirectoryTree``. It is a self-contained ``ModalScreen`` (no app state), so it lives
 here as ``screens.PathModal``. The browse handlers in ``app.py`` push ``screens.PathModal``.
-Widget ids inside the modal (#tree / #cancel / #use) are preserved exactly.
+Widget ids inside the modal (#tree / #cancel / #use) are preserved exactly;
+newer ids: #path_entry (path-entry Input) and #drive_<d> (Windows drive
+quick-jump buttons).
 """
 
 import os
+import string
+from pathlib import Path
 
 from textual import work
 from textual.containers import Horizontal, Vertical
@@ -23,7 +27,22 @@ from .model_audit import AuditError, _human_bytes, audit_file, suggest_exclusion
 
 
 class PathModal(ModalScreen):
-    """Folder/file picker built on DirectoryTree."""
+    """Folder/file picker built on DirectoryTree.
+
+    ``DirectoryTree`` cannot navigate above its root, which on Windows traps a
+    picker opened with an empty/relative start inside one drive. Two escape
+    hatches are provided:
+
+    * a path-entry ``Input`` (``#path_entry``) pre-filled with the start path:
+      Enter on an existing directory re-roots the tree there (Textual 8.2.8's
+      ``DirectoryTree.path`` reactive reloads on assignment); in ``file_mode``
+      Enter on an existing file selects it and enables ``#use``; nonexistent
+      paths are ignored.
+    * on Windows only, a row of drive quick-jump buttons (``#drive_<d>`` for
+      every existing drive letter) that re-root the tree at ``<d>:\\``.
+
+    Selecting a directory in the tree syncs its path back into ``#path_entry``.
+    """
 
     def __init__(self, start: str, file_mode: bool = False) -> None:
         super().__init__()
@@ -33,30 +52,66 @@ class PathModal(ModalScreen):
 
     def compose(self) -> "object":
         tree = DirectoryTree(self.start, id="tree")
-        yield Vertical(
+        children: list = [
             Label("Select a model folder" if not self.file_mode else "Select a folder or .safetensors file"),
+            Input(value=self.start, placeholder="type a path and press Enter", id="path_entry"),
+        ]
+        if os.name == "nt":
+            # Windows drive quick-jump: DirectoryTree cannot navigate above its
+            # root, so a button per existing drive letter re-roots the tree.
+            drives = [
+                Button(f"{d}:", id=f"drive_{d}", classes="drive")
+                for d in string.ascii_uppercase
+                if os.path.exists(f"{d}:\\")
+            ]
+            if drives:
+                children.append(Horizontal(*drives, id="drive_row"))
+        children.extend([
             tree,
             Horizontal(
                 Button("Cancel", id="cancel"),
                 Button("Use Selected", id="use", disabled=True),
                 classes="buttons",
             ),
-            classes="modal",
-        )
+        ])
+        yield Vertical(*children, classes="modal")
+
+    def _reroot_tree(self, path: str) -> None:
+        """Re-root the DirectoryTree at ``path`` (the ``path`` reactive reloads)."""
+        tree = self.query_one("#tree", DirectoryTree)
+        tree.path = Path(path)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Enter in #path_entry: re-root on a directory, select a file in file_mode."""
+        if event.input.id != "path_entry":
+            return
+        value = event.value.strip()
+        if not value:
+            return
+        if os.path.isdir(value):
+            self._reroot_tree(value)
+        elif self.file_mode and os.path.isfile(value):
+            self.selected = value
+            self.query_one("#use", Button).disabled = False
+        # Nonexistent paths are ignored (kept minimal by design).
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ""
+        if button_id.startswith("drive_"):
+            self._reroot_tree(f"{button_id[len('drive_')]}:\\")
+        elif event.button.id == "cancel":
+            self.dismiss("")
+        else:
+            self.dismiss(self.selected)
 
     def on_directory_tree_directory_selected(self, event: DirectoryTree.NodeSelected) -> None:
         self.selected = event.node.data.path
+        self.query_one("#path_entry", Input).value = str(event.node.data.path)
         self.query_one("#use", Button).disabled = False
 
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         self.selected = event.node.data.path
         self.query_one("#use", Button).disabled = False
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "cancel":
-            self.dismiss("")
-        else:
-            self.dismiss(self.selected)
 
 
 class ConfirmModal(ModalScreen):
