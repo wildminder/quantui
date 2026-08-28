@@ -368,9 +368,42 @@ default `233983427`) so a re-run — and a resumed run — are reproducible. The
 legacy `convert_to_quant` baseline re-rolls a random seed on every run; the
 streaming path does not, which is intentional. Pass `--manual_seed` to override.
 
-Run the test suite:
+## Development: quality gates
+
+Every commit is gated. The gate has two stages, both of which must pass before
+`git commit` succeeds:
+
+| Stage | Script | What it runs |
+| --- | --- | --- |
+| 1 | `scripts/precommit_ruff.sh` | ruff count vs. the frozen baseline in `docs/reviews/ruff-baseline.txt`, then mypy over the five typing-clean core modules (`COVERAGE=1` additionally enforces per-module coverage floors) |
+| 2 | `scripts/gate_tests.sh` | the headless pytest suite: `python -m pytest tests/ -q --ignore=tests/test_incremental_safetensors.py --ignore=tests/test_stream_quant.py` |
+
+Install the gate as a git hook (idempotent — safe to re-run):
 
 ```bash
-.venv-test\Scripts\python.exe -m pytest -q
+bash scripts/install_hooks.sh       # writes .git/hooks/pre-commit
+bash scripts/install_hooks.sh /path/to/other/checkout
 ```
+
+The repo currently has **no remote**, so there is no push-based CI: enforcement
+happens at commit time. The hook re-runs the exact same scripts, so it can also
+be invoked by hand — `bash .git/hooks/pre-commit` — and, if a remote is added
+later, wrapped unchanged in a CI workflow.
+
+Run the stages individually:
+
+```bash
+bash scripts/precommit_ruff.sh      # ruff + mypy
+bash scripts/gate_tests.sh          # pytest (override interpreter via GATE_PYTHON=...)
+```
+
+Emergency bypass for a single commit:
+
+```bash
+git commit --no-verify -m "..."
+```
+
+Two suites stay excluded from the headless gate because they need a real torch
+install: `tests/test_stream_quant.py` and `tests/test_incremental_safetensors.py`.
+Run them in one of the CTQ environments (see `scripts/gate_torch.sh`, NTH-009).
 
