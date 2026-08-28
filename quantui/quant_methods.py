@@ -19,21 +19,21 @@ import ast
 import os
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 
 # --------------------------------------------------------------------------- #
 # Enums
 # --------------------------------------------------------------------------- #
-class Family(str, Enum):
+class Family(StrEnum):
     """Top-level quantization family. This is the single seam the TUI branches on."""
 
     GGUF = "gguf"  # Unsloth GGUF (causal-LM LLMs)
     COMFY = "comfy"  # ComfyUI / convert_to_quant (diffusion)
 
 
-class Backend(str, Enum):
+class Backend(StrEnum):
     """Concrete worker backend behind a family."""
 
     UNSLOTH = "unsloth"
