@@ -83,7 +83,8 @@ async def test_wizard_disabled_during_active_run():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
         toasts = []
-        monkey_toast = lambda msg, severity="information": toasts.append((msg, severity))
+        def monkey_toast(msg, severity="information"):
+            toasts.append((msg, severity))
         a.emit_toast = monkey_toast  # type: ignore[method-assign]
         a._run_active = True
         depth = len(a.screen_stack)

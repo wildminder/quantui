@@ -137,7 +137,8 @@ async def test_help_placeholder_toast():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
         toasts = []
-        monkey_toast = lambda msg, severity="information": toasts.append((msg, severity))
+        def monkey_toast(msg, severity="information"):
+            toasts.append((msg, severity))
         a.emit_toast = monkey_toast  # type: ignore[method-assign]
         await pilot.press("?")
         await pilot.pause()
