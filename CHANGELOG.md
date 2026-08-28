@@ -16,6 +16,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   diffusion-head projections/modulations).
 
 ### Added
+- **Commit-time quality gate (IMP-004).** New `scripts/install_hooks.sh`
+  installs an idempotent `.git/hooks/pre-commit` that runs the two gate stages
+  in order and blocks the commit on the first failure, forwarding the failing
+  stage's exit code. Stage 1 is the existing `scripts/precommit_ruff.sh`
+  (ruff count vs. baseline + mypy); stage 2 is the new
+  `scripts/gate_tests.sh`, which runs the headless pytest suite with both
+  torch-dependent suites ignored (`GATE_PYTHON` overrides the interpreter).
+  The repo has no remote, so push-based CI does not apply — enforcement
+  happens at commit time, and the same scripts can be wrapped unchanged in CI
+  later. Emergency bypass stays available via `git commit --no-verify`.
+  Covered by `tests/test_hook_installer.py` (11 tests: install, idempotency,
+  refusal outside a checkout, stage-failure blocking, exit-code propagation),
+  which stubs both stages against throwaway temp repos so the real
+  `.git/hooks` is never touched.
 - **Sharded model folder support for the audit.** `model_audit` now audits
   HuggingFace sharded models directly — no merge step needed. New
   `audit_sharded_folder(path)` reads `model.safetensors.index.json`, scans
