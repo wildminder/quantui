@@ -60,7 +60,7 @@ def test_roundtrip_mixed_dtypes(tmp_path):
     assert out.exists()
     with safe_open(str(out), framework="pt") as f:
         assert set(f.keys()) == {n for n, _, _, _, _ in tensors}
-        for name, dtype, shape, data, t in tensors:
+        for name, _dtype, shape, data, t in tensors:
             got = f.get_tensor(name)
             assert list(got.shape) == shape
             assert got.dtype == t.dtype
@@ -192,7 +192,7 @@ def test_slot_growth(tmp_path):
     # After growth the file must still be fully loadable & byte-exact
     with safe_open(str(out), framework="pt") as f:
         assert set(f.keys()) == {n for n, _, _, _, _ in tensors}
-        for name, dtype, shape, data, t in tensors:
+        for name, _dtype, _shape, data, _t in tensors:
             assert f.get_tensor(name).detach().cpu().numpy().tobytes() == data
 
 

@@ -17,8 +17,7 @@ import threading
 import time
 
 import pytest
-from textual.widgets import (Button, Checkbox, Input, Label, RadioButton, RadioSet,
-                             RichLog, Select)
+from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet, RichLog, Select
 
 from quantui import app as appmod
 from quantui import run_config as rc_mod
@@ -265,7 +264,7 @@ async def test_gguf_regression(fake_popen, tmp_path):
 
         # Worker stream is routed through the LogRouter to the RichLog (not via log_msg
         # directly), so assert on the RichLog widget content here.
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "FAKE_WORKER_LINE" in rich
         assert "Done ✓" in statuses
         cmd = " ".join(fake_popen["cmd"])
@@ -300,7 +299,7 @@ async def test_comfy_run_builds_cmd_and_streams(fake_popen, tmp_path):
                     "--convrot", "--convrot_group_size", "256", "--flux2"]:
             assert tok in cmd, tok
         # Worker stream is routed through the LogRouter to the RichLog directly.
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "FAKE_WORKER_LINE" in rich
         assert "Done ✓" in statuses
 
@@ -848,7 +847,7 @@ async def test_log_msg_ctq_separator_keeps_bar_and_log(tmp_path, monkeypatch):
         assert "(2/211)" in value and "b.weight" in value, value
 
         # Separator + detail echoed to RichLog (fixed "fewer strings").
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "----" in rich, rich
         assert "Tensor shape" in rich, rich
 

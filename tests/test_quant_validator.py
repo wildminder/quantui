@@ -205,10 +205,10 @@ async def test_validate_button_logs_valid(tmp_path):
         a.query_one("#validate_path").value = str(f)
         a.query_one("#validate", Button).press()
         await _wait_until(
-            lambda: "PASS" in "\n".join(str(l) for l in a.query_one(RichLog).lines),
+            lambda: "PASS" in "\n".join(str(line) for line in a.query_one(RichLog).lines),
             pilot, timeout=5,
         )
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "PASS" in rich
         assert "int8_tensorwise" in rich
 
@@ -234,10 +234,10 @@ async def test_validate_button_logs_invalid(tmp_path):
         a.query_one("#validate_path").value = str(f)
         a.query_one("#validate", Button).press()
         await _wait_until(
-            lambda: "FAIL" in "\n".join(str(l) for l in a.query_one(RichLog).lines),
+            lambda: "FAIL" in "\n".join(str(line) for line in a.query_one(RichLog).lines),
             pilot, timeout=5,
         )
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "FAIL" in rich
 
 
@@ -253,8 +253,8 @@ async def test_validate_button_empty_path_errors(tmp_path):
         a.query_one("#validate_path").value = ""
         a.query_one("#validate").press()
         await _wait_until(
-            lambda: any("no file path" in str(l) for l in a.query_one(RichLog).lines),
+            lambda: any("no file path" in str(line) for line in a.query_one(RichLog).lines),
             pilot, timeout=5,
         )
-        rich = "\n".join(str(l) for l in a.query_one(RichLog).lines)
+        rich = "\n".join(str(line) for line in a.query_one(RichLog).lines)
         assert "no file path provided" in rich

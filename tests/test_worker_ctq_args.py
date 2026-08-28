@@ -57,7 +57,7 @@ def test_progress_emits_parseable_envelope(capsys):
     # parser classifies as progress and the store turns into a determinate state.
     progress("shard", cur=1, total=3, label="Quantizing x")
     out = capsys.readouterr().out
-    lines = [l for l in out.splitlines() if l.startswith("CTQ_PROGRESS ")]
+    lines = [line for line in out.splitlines() if line.startswith("CTQ_PROGRESS ")]
     assert lines, out
     obj = parse_ctq_progress(lines[0])
     assert obj == {"phase": "shard", "cur": 1, "total": 3, "label": "Quantizing x"}
@@ -67,7 +67,7 @@ def test_progress_handles_partial_payload(capsys):
     # pct-only (no cur/total) is still a valid envelope.
     progress("calib", pct=50.0)
     out = capsys.readouterr().out
-    obj = parse_ctq_progress([l for l in out.splitlines() if l.startswith("CTQ_PROGRESS ")][0])
+    obj = parse_ctq_progress([line for line in out.splitlines() if line.startswith("CTQ_PROGRESS ")][0])
     assert obj == {"phase": "calib", "pct": 50.0}
 
 
