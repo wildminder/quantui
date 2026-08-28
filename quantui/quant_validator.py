@@ -132,7 +132,11 @@ def validate_comfy_quant(path: str, *, numeric: bool = False) -> ValidationRepor
 
     markers = [k for k in keys if k.endswith(".comfy_quant")]
     scales = [k for k in keys if k.endswith(".weight_scale")]
-    input_scales = [k for k in keys if k.endswith(".input_scale")]
+    # NOTE: orphan detection below covers .weight_scale only. `.input_scale`
+    # (block-wise INT8, written under the same <base> as .comfy_quant per
+    # tensor_quant.py) is deliberately NOT checked -- adding a new error class
+    # to a validation report is a behavior change, not a lint fix. Tracked as
+    # NTH-012 in the issues tracker.
 
     if not markers:
         report.add_warning(

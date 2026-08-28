@@ -84,8 +84,6 @@ def run_case(name, model_dir, from_pretrained_fake, expect_fail, expect_substr=N
 
 
 def main():
-    overall = []
-
     # Case 1: Non-causal / VibeVoice (Seq2Seq / multimodal TTS model)
     vibevoice_dir = make_model_dir(
         {"architectures": ["VibeVoiceForConditionalGeneration"], "model_type": "vibevoice"}
