@@ -8,6 +8,10 @@ via compatibility aliases (removed in T09).
 **Regexes live ONLY here (see plan §8)** -- never re-define a progress regex elsewhere.
 """
 
+import json
+import re
+from dataclasses import dataclass
+
 # Structured progress envelope emitted by OUR workers (worker_ctq.py / worker_ctq_kitchen.py).
 # A line of the exact form:
 #     CTQ_PROGRESS {"phase":"shard","cur":1,"total":3,"label":"Quantizing shard ...","pct":33.3}
@@ -15,10 +19,6 @@ via compatibility aliases (removed in T09).
 # headers, this envelope is unambiguously classified as progress and carries a structured
 # (cur, total, pct) payload that drives a real Textual ProgressBar. See live_progress.py.
 CTQ_PROGRESS_PREFIX = "CTQ_PROGRESS "
-
-import json
-import re
-from dataclasses import dataclass
 
 # tqdm / optimizer progress bar: "<pct>%|...|" (percent glued to a pipe, the bar,
 # then a second pipe). We deliberately do NOT require a trailing '[' so ?%-bars and

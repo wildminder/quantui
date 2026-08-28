@@ -139,3 +139,11 @@ def test_parse_tqdm_progress_rejects_ctq_header_and_epoch():
 def test_parse_tqdm_progress_rejects_unknown_total():
     # Unknown-total bars ("?/?") carry no usable signal -> None (legacy text path).
     assert sp.parse_tqdm_progress("Optimizing:  ?%|###| ?/? [?it/s]") is None
+
+
+def test_ctq_progress_prefix_is_pinned():
+    # Load-bearing: worker_ctq.py / worker_ctq_kitchen.py emit exactly this
+    # prefix and stream_parser classifies lines by it, so changing the value
+    # (or dropping the trailing space) silently disables structured progress.
+    # Pinned so the NTH-008 import reordering cannot regress it.
+    assert sp.CTQ_PROGRESS_PREFIX == "CTQ_PROGRESS "
