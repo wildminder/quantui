@@ -381,7 +381,8 @@ def eval_visible_when(predicate: str | None, context: dict[str, Any]) -> bool:
             return not visit(node.operand)
         if isinstance(node, ast.Compare):
             left = visit(node.left)
-            for op, comp in zip(node.ops, node.comparators):
+            # strict=True: ast.Compare always carries one comparator per op.
+            for op, comp in zip(node.ops, node.comparators, strict=True):
                 right = visit(comp)
                 if isinstance(op, ast.Eq):
                     if left != right:
