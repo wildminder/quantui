@@ -379,7 +379,9 @@ def test_merge_offsets_cumulative(tmp_path):
     offsets.sort()
 
     # strictly non-overlapping + cumulative: each start == previous end.
-    for (_, prev_end), (cur_start, _) in zip(offsets, offsets[1:]):
+    # strict=False: offsets[1:] is intentionally one shorter (the last span has
+    # no successor to compare against).
+    for (_, prev_end), (cur_start, _) in zip(offsets, offsets[1:], strict=False):
         assert cur_start == prev_end, (offsets,)
     total = offsets[-1][1]
     # total data length == sum of shard buffer lengths
