@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Changed
+- **Ruff debt paid down to zero (NTH-008) — 27 findings → 0, and the gate is
+  now zero-tolerance.** Fixed in rule-homogeneous batches: E741 ×11 (ambiguous
+  `l` → `line` in the RichLog-line comprehensions), B007 ×4 (unused loop vars →
+  `_`), E402 ×3 (`stream_parser` imports hoisted above the
+  `CTQ_PROGRESS_PREFIX` constant), F841 ×2 (dead `input_scales` / `overall`),
+  UP042 ×2 (`Family`/`Backend` are now `enum.StrEnum`), B905 ×2 (explicit
+  `zip(strict=…)`), E731 ×2 (assigned lambda → `def`), I001 ×1.
+  `docs/reviews/ruff-baseline.txt` is ratcheted from 27 to 0, so any new
+  finding fails `scripts/precommit_ruff.sh` outright.
+- **`Family` / `Backend` are `enum.StrEnum`.** On Python 3.11+ a `(str, Enum)`
+  mixin formats as `"Family.GGUF"`; `StrEnum` formats as the value `"gguf"`.
+  The app only compared members or read `.value`, so behaviour is unchanged —
+  the formatting contract is now pinned by `tests/test_quant_methods_enums.py`
+  (9 tests).
 - **Audit classifier recognizes `linear1`/`linear2` FFN weights.** Added to
   `LINEAR_SEGMENTS` after the VibeVoice-7B audit surfaced 156 unambiguous FFN
   matmul weights (`*.ffn.linear1/linear2.weight` in the acoustic/semantic
@@ -16,6 +30,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   diffusion-head projections/modulations).
 
 ### Added
+- **The ruff count gate survives zero findings (NTH-008).** `ruff` prints
+  `All checks passed!` (not `Found N errors.`) when clean, so the
+  count-extraction pipeline in `scripts/precommit_ruff.sh` matched nothing and
+  — under `set -euo pipefail` — the failed assignment killed the script
+  silently, i.e. the gate broke exactly when the finding count reached zero.
+  The pipeline now ends in `|| true` (empty count → 0). `RUFF` / `MYPY` are
+  overridable via env so the script is testable without the real tools;
+  `tests/test_gate_scripts.py` (4 tests) pins the zero-finding case, the
+  at-baseline pass, the above-baseline failure, and mypy blocking the gate
+  (the baseline is read from the file at test time so future ratchets do not
+  break the assertions).
 - **Commit-time quality gate (IMP-004).** New `scripts/install_hooks.sh`
   installs an idempotent `.git/hooks/pre-commit` that runs the two gate stages
   in order and blocks the commit on the first failure, forwarding the failing
