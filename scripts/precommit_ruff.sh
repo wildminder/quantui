@@ -10,13 +10,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-RUFF="ruff"
+# RUFF / MYPY can be overridden so the gate is testable without the real tools
+# (see tests/test_gate_scripts.py).
+RUFF="${RUFF:-ruff}"
 BASELINE_FILE="docs/reviews/ruff-baseline.txt"
-MYPY="python"
+MYPY="${MYPY:-python}"
 
 # ruff exits 1 when findings exist; capture output without tripping set -e.
 ruff_out=$("$RUFF" check quantui/ tests/ 2>/dev/null || true)
-live=$(printf '%s' "$ruff_out" | grep -oE "^Found [0-9]+ error" | grep -oE "[0-9]+" | head -1)
+# '|| true' matters: when ruff is clean it prints "All checks passed!" instead
+# of "Found N errors", so the greps below match nothing. Without it, pipefail
+# makes this assignment fail and set -e kills the script silently -- i.e. the
+# gate broke precisely when the finding count reached zero (NTH-008).
+live=$(printf '%s' "$ruff_out" | grep -oE "^Found [0-9]+ error" | grep -oE "[0-9]+" | head -1 || true)
 [ -z "$live" ] && live=0
 base=$(grep -m1 -oE "^Found [0-9]+" "$BASELINE_FILE" | grep -oE "[0-9]+$")
 
