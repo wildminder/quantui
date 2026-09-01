@@ -360,3 +360,40 @@ def test_default_constants_single_home():
     assert appmod.DEFAULT_CTQ_OUTPUT_MODE is rc.DEFAULT_CTQ_OUTPUT_MODE
     assert handlers.DEFAULT_CTQ_OUTPUT_MODE is rc.DEFAULT_CTQ_OUTPUT_MODE
     assert handlers.WORKER_CTQ_MODULE == rc.WORKER_CTQ_MODULE
+
+
+# --------------------------------------------------------------------------- #
+# T4 (plan 2026-08-31-gguf-unsloth-parity): parse_methods + imatrix + method_list
+# --------------------------------------------------------------------------- #
+def test_parse_methods_single():
+    assert rc.parse_methods("q4_k_m") == ["q4_k_m"]
+
+
+def test_parse_methods_multi_dedupe():
+    # Order-preserving de-dup: "q4_k_m, q5_k_m, q4_k_m" runs q4_k_m once.
+    assert rc.parse_methods("q4_k_m, q5_k_m, q4_k_m") == ["q4_k_m", "q5_k_m"]
+
+
+def test_parse_methods_strips_empties():
+    # Stray separators/whitespace never produce empty-string "methods".
+    assert rc.parse_methods(" , q8_0 , ") == ["q8_0"]
+
+
+def test_parse_methods_empty():
+    assert rc.parse_methods("") == []
+    assert rc.parse_methods(" , ") == []
+
+
+def test_ggufconfig_imatrix_default_empty():
+    g = rc.GgufConfig()
+    assert g.imatrix == ""
+
+
+def test_ggufconfig_method_list():
+    g = rc.GgufConfig(method="q4_k_m, q5_k_m")
+    assert g.method_list == ["q4_k_m", "q5_k_m"]
+    # Property is derived from method -- never stored separately.
+    g.method = "q8_0"
+    assert g.method_list == ["q8_0"]
+
+
