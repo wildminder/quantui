@@ -462,3 +462,46 @@ def test_validate_single_id_unchanged(tmp_path):
     # Regression pin: today's passing cases still pass.
     assert rc.validate_gguf(_g("q4_k_m")) == []
     assert rc.validate_gguf(_g("q8_0")) == []
+
+
+# --------------------------------------------------------------------------- #
+# T6 (plan 2026-08-31-gguf-unsloth-parity): build_gguf_cmd --imatrix emission
+# --------------------------------------------------------------------------- #
+def test_build_cmd_emits_imatrix():
+    cmd = rc.build_gguf_cmd(_g("iq2_xs", imatrix="auto"))
+    i = cmd.index("--imatrix")
+    assert cmd[i + 1] == "auto"
+
+
+def test_build_cmd_imatrix_omitted_when_empty():
+    cmd = rc.build_gguf_cmd(_g("q4_k_m"))
+    assert "--imatrix" not in cmd
+
+
+def test_build_cmd_imatrix_emits_path():
+    cmd = rc.build_gguf_cmd(_g("iq2_s", imatrix="C:/imat/imatrix.dat"))
+    i = cmd.index("--imatrix")
+    assert cmd[i + 1] == "C:/imat/imatrix.dat"
+
+
+def test_build_cmd_multi_method_joined():
+    # Multi-method passes the raw comma-joined string as ONE argv element;
+    # the worker (T7) splits it and loops.
+    cmd = rc.build_gguf_cmd(_g("q4_k_m, q5_k_m"))
+    i = cmd.index("--method")
+    assert cmd[i + 1] == "q4_k_m, q5_k_m"
+
+
+def test_build_cmd_single_method_unchanged():
+    # Frozen argv snapshot: any change here is a deliberate CLI break and
+    # must update the worker docstring + this pin together.
+    g = rc.GgufConfig(
+        model="/m", output="/o", method="q4_k_m", pybin="PYBIN",
+        max_seq_length="4096",
+    )
+    assert rc.build_gguf_cmd(g) == [
+        "PYBIN", "-m", rc.WORKER_GGUF_MODULE,
+        "--model", "/m", "--output", "/o",
+        "--method", "q4_k_m",
+        "--max-seq-length", "4096",
+    ]

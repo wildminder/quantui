@@ -370,11 +370,17 @@ def build_gguf_cmd(g: GgufConfig) -> list[str]:
         g.model,
         "--output",
         g.output,
+        # Raw comma-joined string as ONE argv element: the worker (T7)
+        # splits it via parse_methods and quantizes each id in order.
         "--method",
         g.method,
         "--max-seq-length",
         g.max_seq_length or "4096",
     ]
+    # T6: "" = no imatrix; "auto" = fetch the upstream Unsloth imatrix at
+    # run time; anything else = local path (validate_gguf checked existence).
+    if g.imatrix:
+        cmd += ["--imatrix", g.imatrix]
     if g.load_in_4bit:
         cmd.append("--load-in-4bit")
     if g.push_to_hub and g.hub_repo:
