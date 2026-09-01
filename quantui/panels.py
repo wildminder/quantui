@@ -33,15 +33,16 @@ from textual.widgets import (
 
 from .quant_methods import (
     COMFY_FORMATS,
+    DEFAULT_GGUF_METHOD,
     METHODS,
-    METHODS_BY_ID,
     format_options,
     preset_options,
 )
 
 # --- derived constants (mirror app.py; source of truth is quant_methods) -------
 SELECT_OPTIONS = [(m.label, m.id) for m in METHODS]
-DEFAULT_METHOD = "q4_k_xl" if "q4_k_xl" in METHODS_BY_ID else METHODS[0].id
+# T3b: re-export, NOT a redefinition (see app.py note).
+DEFAULT_METHOD = DEFAULT_GGUF_METHOD
 DEFAULT_CTQ_FORMAT = COMFY_FORMATS[0].id  # fp8_e4m3
 
 
@@ -370,7 +371,7 @@ def build_gguf_panel() -> VerticalScroll:
         Static(id="method_info"),
         Collapsible(
             Label("Custom method (optional, overrides the dropdown)"),
-            Input(id="custom", placeholder="e.g. q4_k_xl — use if API name changed"),
+            Input(id="custom", placeholder="e.g. q4_k_m, q5_k_m — comma-separate for multiple"),
             Label("Worker Python interpreter (must have unsloth + CUDA)"),
             Input(id="pybin", value=sys.executable),
             Label("Max sequence length"),

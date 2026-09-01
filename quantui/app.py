@@ -64,6 +64,7 @@ from .header_progress import HeaderProgressHold
 from .live_progress import LiveProgressStore
 from .quant_methods import (
     COMFY_FORMATS,
+    DEFAULT_GGUF_METHOD,
     METHODS,
     METHODS_BY_ID,
     Family,
@@ -109,7 +110,10 @@ def _notify_no_launcher(app: "QuantApp") -> None:
     app.emit_toast("No editor available to open the log.", "warning")
 
 SELECT_OPTIONS = [(m.label, m.id) for m in METHODS]
-DEFAULT_METHOD = "q4_k_xl" if "q4_k_xl" in METHODS_BY_ID else METHODS[0].id
+# T3b (plan 2026-08-31-gguf-unsloth-parity): re-export, NOT a redefinition.
+# The old duplicate ("q4_k_xl if present else METHODS[0]") degraded to
+# not_quantized after the UD-* removal; the single home is quant_methods.
+DEFAULT_METHOD = DEFAULT_GGUF_METHOD  # noqa: F811  (re-export alias)
 
 # NTH-001: project constants are single-homed in run_config; re-exported here
 # for backward compatibility with existing imports/tests.

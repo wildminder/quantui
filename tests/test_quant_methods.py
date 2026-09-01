@@ -6,6 +6,7 @@ from quantui.quant_methods import (
     ALLOWED_QUANT_IDS,
     COMFY_FORMATS,
     COMFY_PRESETS,
+    DEFAULT_GGUF_METHOD,
     IMATRIX_QUANT_IDS,
     INDEX_NAME,
     METHODS,
@@ -357,3 +358,34 @@ def test_ud_footer_constant():
     # where to get them instead of silently dropping them.
     assert UD_INFO_FOOTER.strip()
     assert "download" in UD_INFO_FOOTER.lower()
+
+
+# --------------------------------------------------------------------------- #
+# T3b: DEFAULT_GGUF_METHOD single-homed in quant_methods (was duplicated in
+# app.py + panels.py with a q4_k_xl guard that degraded to not_quantized)
+# --------------------------------------------------------------------------- #
+def test_default_gguf_method_is_q4_k_m():
+    # unsloth's own recommended default for the "quantized" path is q4_k_m;
+    # not_quantized (the old degraded fallback) wastes a run.
+    assert DEFAULT_GGUF_METHOD == "q4_k_m"
+    assert DEFAULT_GGUF_METHOD in METHODS_BY_ID
+
+
+def test_default_method_single_source():
+    # app.py and panels.py must RE-EXPORT the same object, not redefine it.
+    from quantui import app as appmod
+    from quantui import panels as panelsmod
+
+    assert appmod.DEFAULT_METHOD is DEFAULT_GGUF_METHOD
+    assert panelsmod.DEFAULT_METHOD is DEFAULT_GGUF_METHOD
+
+
+def test_no_q4_k_xl_strings_in_ui_modules():
+    # Grep-equivalent sweep: the UI modules must not advertise the removed id
+    # anywhere (placeholder text included).
+    import inspect
+
+    import quantui.panels as panelsmod
+
+    src = inspect.getsource(panelsmod)
+    assert "q4_k_xl" not in src

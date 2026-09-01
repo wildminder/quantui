@@ -13,7 +13,7 @@ from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
-from quantui.quant_methods import COMFY_FORMATS, METHODS
+from quantui.quant_methods import COMFY_FORMATS, DEFAULT_GGUF_METHOD, METHODS
 
 # (label, id) pairs for the method Select — mirrors panels.SELECT_OPTIONS.
 SELECT_METHOD_OPTIONS = [(m.label, m.id) for m in METHODS]
@@ -69,7 +69,12 @@ class WizardScreen(ModalScreen):
                     allow_blank=False,
                 ),
                 Label("method"),
-                Select(SELECT_METHOD_OPTIONS, id="wiz_method", allow_blank=False),
+                # T3b: pin the default -- an unpinned Select lands on
+                # METHODS[0] (not_quantized), which wastes the run.
+                Select(
+                    SELECT_METHOD_OPTIONS, id="wiz_method", allow_blank=False,
+                    value=self.values.get("method", DEFAULT_GGUF_METHOD),
+                ),
             )
         elif self.step == 2:
             title.update("Step 3/4 — Format options")
