@@ -136,6 +136,12 @@ IMATRIX_QUANT_IDS: tuple[str, ...] = (
 # save_pretrained_gguf cannot produce them (the UD mixes are proprietary
 # download-only). UD_INFO_FOOTER (added in T3) explains this in the UI.
 
+# Single home for the GGUF default (T3b). unsloth's own recommended default
+# for the "quantized" path is q4_k_m. app.py and panels.py RE-EXPORT this
+# as DEFAULT_METHOD -- they must never redefine it (the old duplicated
+# "q4_k_xl if present else METHODS[0]" guard degraded to not_quantized).
+DEFAULT_GGUF_METHOD = "q4_k_m"
+
 # approx_bpw = approximate bits-per-weight (helps estimate size vs quality).
 # 35 official unsloth quant ids (plan 2026-08-31): the 24 ALLOWED_QUANTS in save.py
 # dict order, then the 11 IMATRIX_QUANTS in save.py dict order. approx_bpw is a

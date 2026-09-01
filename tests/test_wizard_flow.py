@@ -120,3 +120,27 @@ async def test_wizard_screen_steps_and_cancel():
         assert wiz.step == 0
         wiz.action_cancel()
         await pilot.pause()
+
+
+async def test_wizard_default_method_is_q4_k_m():
+    """T3b (plan 2026-08-31-gguf-unsloth-parity): the wizard's method Select
+    must land on the same DEFAULT_GGUF_METHOD as the main form -- previously it
+    degraded to METHODS[0] (not_quantized), silently wasting the run."""
+    from quantui.quant_methods import DEFAULT_GGUF_METHOD
+
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        wiz = screens_wizard.WizardScreen()
+        a.push_screen(wiz)
+        # Wait for the wizard body to compose (same retry loop as above).
+        for _ in range(20):
+            await pilot.pause()
+            try:
+                a.screen.query_one("#wiz_next")
+                break
+            except Exception:
+                continue
+        a.screen.query_one("#wiz_next").press()
+        await pilot.pause()
+        assert str(a.screen.query_one("#wiz_method", Select).value) == DEFAULT_GGUF_METHOD
+        assert DEFAULT_GGUF_METHOD == "q4_k_m"
