@@ -279,6 +279,17 @@ METHODS: list[QuantMethod] = [
 
 METHODS_BY_ID: dict[str, QuantMethod] = {m.id: m for m in METHODS}
 
+# Shown under the GGUF method list. The UD-* ("Dynamic 2.0") mixes used to be
+# registry entries (q4_k_xl / q3_k_xl / q2_k_xl) but were removed:
+# save_pretrained_gguf cannot produce them, because the per-layer qtype recipe
+# is proprietary and Unsloth ships the mixes as downloads only. Pointing the
+# user at the downloads beats letting the ids silently disappear.
+UD_INFO_FOOTER = (
+    "Unsloth Dynamic (UD-*) mixes are proprietary download-only - download them "
+    "from HuggingFace (unsloth/<model>-GGUF); an open dynamic-mix feature is on "
+    "the roadmap."
+)
+
 
 # --------------------------------------------------------------------------- #
 # ComfyUI / convert_to_quant registry data
