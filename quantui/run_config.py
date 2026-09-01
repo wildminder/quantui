@@ -56,13 +56,40 @@ class GgufConfig:
 
     model: str = ""
     output: str = ""
-    method: str = ""  # selected_method (custom text or dropdown id)
+    # Comma-joined method ids ("q4_k_m, q5_k_m") or a single custom string.
+    # Multi-method runs loop the worker per id (unsloth's own
+    # save_pretrained_gguf accepts quantization_method as str OR list).
+    method: str = ""
+    # "" = no imatrix (most quants); "auto" = fetch the upstream Unsloth
+    # imatrix at run time; otherwise a local path to an imatrix file. The 11
+    # IQ* ids REQUIRE a non-empty value (validate_gguf, T5).
+    imatrix: str = ""
     pybin: str = ""
     max_seq_length: str = "4096"
     load_in_4bit: bool = False
     push_to_hub: bool = False
     hub_repo: str = ""
     hf_token: str = ""
+
+    @property
+    def method_list(self) -> list[str]:
+        """`method` split into de-duplicated ids (order-preserving)."""
+        return parse_methods(self.method)
+
+
+def parse_methods(raw: str) -> list[str]:
+    """Split a (possibly comma-joined) method string into clean ids.
+
+    - splits on ``,``; strips whitespace
+    - drops empty segments (stray separators never become "" methods)
+    - de-duplicates, preserving first-seen order (a repeated id runs once)
+    """
+    seen: list[str] = []
+    for part in (raw or "").split(","):
+        m = part.strip()
+        if m and m not in seen:
+            seen.append(m)
+    return seen
 
 
 @dataclass
