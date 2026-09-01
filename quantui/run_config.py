@@ -20,7 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .quant_methods import (
+    ALLOWED_QUANT_IDS,
     COMFY_FORMATS,
+    IMATRIX_QUANT_IDS,
     Backend,
     Family,
     classify_input,
@@ -28,6 +30,10 @@ from .quant_methods import (
     comfy_preset,
     eval_visible_when,
 )
+
+# The complete official unsloth quant-id whitelist (single source: the
+# registry constants). validate_gguf checks every method id against this.
+_ALL_QUANT_IDS = frozenset(ALLOWED_QUANT_IDS) | frozenset(IMATRIX_QUANT_IDS)
 
 # ---------------------------------------------------------------------------
 # Project constants (single home — NTH-001). app.py / handlers.py re-export
@@ -273,6 +279,24 @@ def validate_gguf(g: GgufConfig) -> list[str]:
         errors.append(f"Worker python not found: {g.pybin}")
     if not g.method:
         errors.append("Quantization method is required.")
+    else:
+        # T5 (plan 2026-08-31-gguf-unsloth-parity): gate methods BEFORE the
+        # run. unsloth only accepts the 35 official ids, and it fails AFTER
+        # a full model load -- catching typos and missing imatrices here
+        # turns a multi-minute failure into an instant one.
+        _valid_ids = _ALL_QUANT_IDS  # (allowed | imatrix) single source
+        for mid in g.method_list:
+            if mid not in _valid_ids:
+                errors.append(
+                    f"Unknown quantization method '{mid}' -- pick one from the dropdown."
+                )
+            elif mid in IMATRIX_QUANT_IDS:
+                if g.imatrix == "":
+                    errors.append(
+                        f"{mid} requires an imatrix (set a path or 'auto')."
+                    )
+                elif g.imatrix != "auto" and not os.path.isfile(g.imatrix):
+                    errors.append(f"imatrix file not found: {g.imatrix}")
     return errors
 
 
