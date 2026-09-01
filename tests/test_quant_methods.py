@@ -3,8 +3,10 @@
 import os
 
 from quantui.quant_methods import (
+    ALLOWED_QUANT_IDS,
     COMFY_FORMATS,
     COMFY_PRESETS,
+    IMATRIX_QUANT_IDS,
     INDEX_NAME,
     METHODS,
     METHODS_BY_ID,
@@ -13,6 +15,7 @@ from quantui.quant_methods import (
     Family,
     OptionField,
     Preset,
+    QuantMethod,
     classify_input,
     comfy_format,
     comfy_preset,
@@ -20,6 +23,7 @@ from quantui.quant_methods import (
     format_options,
     get_method,
     is_sharded_folder,
+    list_line,
     methods_for_family,
     preset_options,
 )
@@ -252,3 +256,96 @@ def test_is_sharded_folder(tmp_path):
     assert is_sharded_folder(str(one)) is False
 
     assert is_sharded_folder(str(tmp_path / "nope")) is False
+
+
+# --------------------------------------------------------------------------- #
+# T1 (plan 2026-08-31-gguf-unsloth-parity): canonical official unsloth ids
+# --------------------------------------------------------------------------- #
+def test_allowed_quant_ids_canonical():
+    # Exactly the 24 ALLOWED_QUANTS ids from unsloth/save.py (dict order).
+    assert list(ALLOWED_QUANT_IDS) == [
+        "not_quantized", "fast_quantized", "quantized", "f32", "bf16", "f16",
+        "q8_0", "q4_k_m", "q5_k_m", "q2_k", "q2_k_l", "q3_k_l", "q3_k_m",
+        "q3_k_s", "q4_0", "q4_1", "q4_k_s", "q4_k", "q5_k", "q5_0", "q5_1",
+        "q5_k_s", "q6_k", "q3_k_xs",
+    ]
+
+
+def test_imatrix_quant_ids_canonical():
+    # Exactly the 11 IMATRIX_QUANTS ids from unsloth/save.py (dict order).
+    assert list(IMATRIX_QUANT_IDS) == [
+        "iq1_s", "iq1_m", "iq2_xxs", "iq2_xs", "iq2_s", "iq2_m",
+        "iq3_xxs", "iq3_s", "iq3_m", "iq4_nl", "iq4_xs",
+    ]
+
+
+def test_qm_needs_imatrix_default_false():
+    m = QuantMethod("x", "X", Family.GGUF, Backend.UNSLOTH)
+    assert m.needs_imatrix is False
+
+
+def test_needs_imatrix_is_kwarg():
+    m = QuantMethod("x", "X", Family.GGUF, Backend.UNSLOTH, needs_imatrix=True)
+    assert m.needs_imatrix is True
+
+
+# --------------------------------------------------------------------------- #
+# T2 (plan 2026-08-31-gguf-unsloth-parity): METHODS == official 35-id surface
+# --------------------------------------------------------------------------- #
+def test_methods_ids_match_official_surface():
+    # save.py exposes 24 ALLOWED_QUANTS + 11 IMATRIX_QUANTS = 35, no more.
+    assert len(METHODS) == 35
+    assert {m.id for m in METHODS} == set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
+
+
+def test_methods_order_pinned():
+    # Registry order is the UI order: 24 ALLOWED (save.py dict order), then 11
+    # IMATRIX. This is the new order pin (the enums file pins Family/Backend only).
+    assert [m.id for m in METHODS] == list(ALLOWED_QUANT_IDS) + list(IMATRIX_QUANT_IDS)
+
+
+def test_no_fake_dynamic_ids():
+    ids = {m.id for m in METHODS}
+    # q4_nl never existed in unsloth (real id is the imatrix-gated iq4_nl);
+    # the three UD-* XL ids claim Dynamic 2.0 output that save_pretrained_gguf
+    # cannot produce (proprietary download-only mixes).
+    for gone in ("q4_nl", "q4_k_xl", "q3_k_xl", "q2_k_xl"):
+        assert gone not in ids
+    for m in METHODS:
+        assert hasattr(m, "dynamic_v2") is False
+
+
+def test_needs_imatrix_flags_correct():
+    flagged = {m.id for m in METHODS if m.needs_imatrix}
+    assert flagged == set(IMATRIX_QUANT_IDS)
+
+
+def test_q2_k_l_description_mentions_preset():
+    # q2_k_l is an unsloth PRESET (q2_k body + q8_0 output/token embeddings),
+    # not a distinct llama.cpp qtype -- the UI must say so.
+    assert "preset" in METHODS_BY_ID["q2_k_l"].description.lower()
+
+
+def test_q6_k_description_official():
+    assert "Uses Q8_K for all tensors" in METHODS_BY_ID["q6_k"].description
+
+
+def test_q2_k_bpw_3_35():
+    assert METHODS_BY_ID["q2_k"].approx_bpw == 3.35
+
+
+# --------------------------------------------------------------------------- #
+# T3 (folded into T2 -- list_line is the other reader of the removed
+# dynamic_v2 field, so both readers must be fixed in the SAME commit)
+# --------------------------------------------------------------------------- #
+def test_list_line_imatrix_marker():
+    assert "[IMATRIX]" in list_line(METHODS_BY_ID["iq2_xs"])
+
+
+def test_list_line_plain_has_no_marker():
+    assert "[IMATRIX]" not in list_line(METHODS_BY_ID["q4_k_m"])
+
+
+def test_list_line_no_dynamic_badge():
+    for m in METHODS:
+        assert "DYNAMIC" not in list_line(m)

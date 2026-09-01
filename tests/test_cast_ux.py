@@ -204,7 +204,11 @@ def test_profile_roundtrip_keeps_new_format_ids(tmp_path):
 def test_profile_unknown_format_id_falls_back_to_default(tmp_path):
     async def main():
         a = _make_app()
-        async with a.run_test():
+        async with a.run_test() as pilot:
+            # Wait for mount: action_family_comfy() -> on_radio_set_changed queries
+            # #gguf_panel, which does not exist until compose has run. Without this
+            # pause the test is a mount race (flaked under full-gate load).
+            await pilot.pause()
             a.action_family_comfy()
             # A saved profile referencing the dead 'onthefly' id must not crash
             # and must leave the select at its current valid value.
