@@ -10,6 +10,7 @@ from quantui.quant_methods import (
     INDEX_NAME,
     METHODS,
     METHODS_BY_ID,
+    UD_INFO_FOOTER,
     Backend,
     ComfyFormat,
     Family,
@@ -349,3 +350,10 @@ def test_list_line_plain_has_no_marker():
 def test_list_line_no_dynamic_badge():
     for m in METHODS:
         assert "DYNAMIC" not in list_line(m)
+
+
+def test_ud_footer_constant():
+    # The UD-* mixes were removed from the registry, so the UI must explain
+    # where to get them instead of silently dropping them.
+    assert UD_INFO_FOOTER.strip()
+    assert "download" in UD_INFO_FOOTER.lower()
