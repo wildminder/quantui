@@ -1,4 +1,4 @@
-"""Backend worker for Unsloth Dynamic 2.0 GGUF quantization.
+"""Backend worker for Unsloth GGUF quantization.
 
 This script is invoked by the TUI as a subprocess so the UI stays responsive
 and Unsloth (torch/CUDA) lives in its own heavy process. It validates the
@@ -6,7 +6,9 @@ model input, imports Unsloth, and runs `save_pretrained_gguf` (or
 `push_to_hub_gguf`). All progress is printed to stdout and streamed to the TUI.
 
 Usage:
-    python worker.py --model PATH --output DIR --method q4_k_xl
+    python worker.py --model PATH --output DIR --method q4_k_m
+    python worker.py --model PATH --output DIR --method "q4_k_m, q5_k_m"
+    python worker.py --model PATH --output DIR --method iq2_xs --imatrix auto
     python worker.py --list-methods
 """
 
@@ -18,6 +20,62 @@ import sys
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Method / imatrix helpers (T7, plan 2026-08-31-gguf-unsloth-parity).
+# parse_methods is imported from run_config -- the SAME splitter the UI and
+# validation use; never re-implement the comma semantics here.
+# ---------------------------------------------------------------------------
+def method_or_methods(raw: str):
+    """`--method` -> unsloth's str-or-list API value.
+
+    1 id  -> the plain string (the overwhelmingly common case).
+    >=2 ids -> a list (unsloth loops the quant pipeline per id).
+    0 ids -> ValueError: argparse allowed empty; a silent no-op run is worse
+             than a loud failure.
+    """
+    from .run_config import parse_methods
+
+    ids = parse_methods(raw)
+    if not ids:
+        raise ValueError("--method must name at least one quantization method.")
+    return ids[0] if len(ids) == 1 else ids
+
+
+def imatrix_value(raw: str):
+    """`--imatrix` -> unsloth's imatrix_file= value.
+
+    ""    -> None (most quants need no imatrix)
+    auto  -> True (unsloth's own contract: fetch the UPSTREAM imatrix)
+    path  -> the path string verbatim (unsloth loads THAT file)
+    """
+    if raw == "":
+        return None
+    if raw == "auto":
+        return True
+    return raw
+
+
+def _gate_methods_imatrix(methods: list, imatrix: str) -> None:
+    """Pre-import re-validation (fires BEFORE `from unsloth import ...`).
+
+    unsloth raises RuntimeError for a missing imatrix only AFTER a full model
+    load -- minutes in. This gate turns that into an instant, friendly error.
+    The UI (validate_gguf, T5) runs the same check; this is the backstop for
+    direct worker invocations.
+    """
+    from .quant_methods import IMATRIX_QUANT_IDS
+
+    for mid in methods:
+        if mid in IMATRIX_QUANT_IDS:
+            if not imatrix:
+                fail(
+                    f"{mid} requires an imatrix (set a path or 'auto'). "
+                    "unsloth refuses to quantize IQ* ids without imatrix_file=."
+                )
+    if imatrix and imatrix != "auto" and not os.path.isfile(imatrix):
+        fail(f"imatrix file not found: {imatrix}")
 
 
 # Structured progress envelope (same protocol as worker_ctq.py): the TUI parses
@@ -145,7 +203,7 @@ def check_supported_architecture(model_dir: str) -> None:
             "Models like VibeVoice need a recent transformers (the VibeVoice class was "
             "merged into transformers ~Sept 2025, PR #40546). Try upgrading:\n"
             "    pip install -U transformers\n"
-            "Note: even after upgrading, Unsloth Dynamic 2.0 GGUF only supports causal "
+            "Note: even after upgrading, Unsloth GGUF export only supports causal "
             "language-model architectures that llama.cpp can run, so TTS / Seq2Seq / "
             "multimodal models still won't convert to GGUF."
         )
@@ -157,7 +215,7 @@ def check_supported_architecture(model_dir: str) -> None:
         name = ", ".join(archs) if archs else (str(model_type) if model_type else "unknown")
         fail(
             f"Unsupported architecture: {name}.\n"
-            "Unsloth Dynamic 2.0 GGUF quantization only supports causal-language-model "
+            "Unsloth GGUF quantization only supports causal-language-model "
             "architectures that llama.cpp can run (e.g. Llama, Qwen2, Mistral, Gemma).\n"
             "This model is not a causal LM (it appears to be a TTS / Seq2Seq / multimodal "
             "model with VAE or diffusion components), so it cannot be converted to GGUF.\n"
@@ -180,10 +238,17 @@ def estimate_disk(model_dir: str) -> int:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Unsloth Dynamic 2.0 GGUF quantizer worker")
+    p = argparse.ArgumentParser(description="Unsloth GGUF quantizer worker")
     p.add_argument("--model", required=False, help="HF folder or .safetensors file")
     p.add_argument("--output", required=False, help="Output directory for the .gguf")
-    p.add_argument("--method", required=False, help="quantization_method id")
+    p.add_argument(
+        "--method", required=False,
+        help="quantization_method id, or comma-joined ids for multi-quant",
+    )
+    p.add_argument(
+        "--imatrix", default="",
+        help="path to an imatrix file, or 'auto' to fetch the upstream one",
+    )
     p.add_argument("--max-seq-length", type=int, default=4096)
     p.add_argument("--load-in-4bit", action="store_true")
     p.add_argument("--push-to-hub", default="", help="HF repo id to push to")
@@ -194,17 +259,32 @@ def main() -> None:
     if args.list_methods:
         from .quant_methods import METHODS
         for m in METHODS:
-            print(m.id)
+            marker = " [IMATRIX]" if m.needs_imatrix else ""
+            print(f"{m.id}{marker}")
         return
 
     if not (args.model and args.output and args.method):
         fail("--model, --output and --method are required (unless --list-methods).")
 
+    from .run_config import parse_methods
+
+    methods = parse_methods(args.method)
+    if not methods:
+        fail("--method must name at least one quantization method.")
+
     from .quant_methods import METHODS_BY_ID
-    method = args.method
-    if method not in METHODS_BY_ID:
-        # Don't hard-fail on unknown ids: Unsloth's API surface changes. Warn instead.
-        log(f"WARNING: '{method}' is not in the known list; passing it through to Unsloth anyway.")
+    for mid in methods:
+        if mid not in METHODS_BY_ID:
+            # Don't hard-fail on unknown ids: Unsloth's API surface changes.
+            # Warn instead (forward-compat escape hatch for brand-new ids).
+            log(f"WARNING: '{mid}' is not in the known list; passing it through to Unsloth anyway.")
+
+    # T7: gate IQ*/imatrix BEFORE the heavy unsloth import + model load.
+    _gate_methods_imatrix(methods, args.imatrix)
+
+    # unsloth API: single id -> string, multiple ids -> list.
+    method_arg = methods[0] if len(methods) == 1 else methods
+    imatrix_arg = imatrix_value(args.imatrix)
 
     model_dir = resolve_model_dir(args.model)
 
@@ -244,25 +324,27 @@ def main() -> None:
     )
 
     if args.push_to_hub:
-        log(f"Exporting + pushing to HF ({args.push_to_hub}) with method={method} ...")
+        log(f"Exporting + pushing to HF ({args.push_to_hub}) with method={method_arg} ...")
         model.push_to_hub_gguf(
             args.push_to_hub,
             tokenizer,
-            quantization_method=method,
+            quantization_method=method_arg,
             token=args.hf_token or None,
+            imatrix_file=imatrix_arg,
         )
     else:
-        log(f"Exporting GGUF to {args.output} with method={method} ...")
+        log(f"Exporting GGUF to {args.output} with method={method_arg} ...")
         _run_with_output_progress(
             lambda: model.save_pretrained_gguf(
                 args.output,
                 tokenizer,
-                quantization_method=method,
+                quantization_method=method_arg,
                 maximum_memory_usage=0.5 if args.load_in_4bit else 0.75,
+                imatrix_file=imatrix_arg,
             ),
             args.output,
             model_bytes,
-            f"Exporting GGUF ({method})",
+            f"Exporting GGUF ({args.method})",
         )
 
     log("DONE: GGUF written.")
