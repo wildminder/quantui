@@ -19,14 +19,14 @@ async def test_wizard_review_matches_form_cmd():
             "family": "gguf",
             "model": "/data/model.safetensors",
             "output": "/data/out",
-            "method": "q4_k_xl",
+            "method": "q4_k_m",
         }
         # Wizard path: apply through the same applier the Start button uses.
         a._apply_profile_fields(wizard_values)
         await pilot.pause()
         assert a.query_one("#model", Input).value == "/data/model.safetensors"
         assert a.query_one("#output", Input).value == "/data/out"
-        assert str(a.query_one("#method", Select).value) == "q4_k_xl"
+        assert str(a.query_one("#method", Select).value) == "q4_k_m"
 
 
 async def test_wizard_start_runs_same_pipeline(tmp_path, monkeypatch):

@@ -28,7 +28,7 @@ def _gguf_cfg(tmp_path, out_name="out"):
         family=Family_GGUF(),
         gguf=rc_mod.GgufConfig(
             model=str(tmp_path), output=str(tmp_path / out_name),
-            method="q4_k_xl", pybin=sys.executable,
+            method="q4_k_m", pybin=sys.executable,
         ),
     )
 
@@ -123,7 +123,7 @@ async def test_rerun_reloads_widgets_from_recent(tmp_path, monkeypatch):
     cfg_dir = tmp_path / "cfg"
     monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(cfg_dir))
     record = ps.RunRecord(
-        ts="t0", family="gguf", method="q4_k_xl",
+        ts="t0", family="gguf", method="q4_k_m",
         output=str(tmp_path / "rerun-out"), status="success", exit_code=0,
         duration_s=1.0,
         config={"family": "gguf", "model": "/the/model", "output": "/the/out"},

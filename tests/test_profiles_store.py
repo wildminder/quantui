@@ -14,7 +14,7 @@ def _record(**kw):
     base = dict(
         ts="2026-08-24 10:00:00",
         family="gguf",
-        method="q4_k_xl",
+        method="q4_k_m",
         output="/tmp/out",
         status="success",
         exit_code=0,

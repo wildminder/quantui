@@ -73,7 +73,10 @@ class QuantMethod:
     label: str
     family: Family
     backend: Backend
-    dynamic_v2: bool = False
+    # True for the 11 official IQ* ids: unsloth REQUIRES imatrix_file= (path
+    # or True = fetch upstream) before it will quantize, else RuntimeError
+    # after a full model load. The TUI gates on this flag pre-run.
+    needs_imatrix: bool = False
     approx_bpw: float | None = None
     description: str = ""
     options: list[OptionField] = field(default_factory=list)  # GGUF keeps this empty
@@ -109,52 +112,169 @@ class Preset:
 
 
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
 # GGUF registry (original entries, now tagged with family/backend/options)
 # --------------------------------------------------------------------------- #
+# Canonical official unsloth quant ids — copied from ref/unsloth/unsloth/save.py
+# (ALLOWED_QUANTS + IMATRIX_QUANTS dicts, same order). ORDER IS LOAD-BEARING:
+# the UI iterates these, and unsloth's docs list them in this order. The 11
+# IMATRIX ids additionally REQUIRE imatrix_file= (path or True = fetch the
+# upstream imatrix) or unsloth refuses to quantize. Single source of truth for
+# tests + run_config + worker — never re-list ids elsewhere.
+ALLOWED_QUANT_IDS: tuple[str, ...] = (
+    "not_quantized", "fast_quantized", "quantized", "f32", "bf16", "f16",
+    "q8_0", "q4_k_m", "q5_k_m", "q2_k", "q2_k_l", "q3_k_l", "q3_k_m",
+    "q3_k_s", "q4_0", "q4_1", "q4_k_s", "q4_k", "q5_k", "q5_0", "q5_1",
+    "q5_k_s", "q6_k", "q3_k_xs",
+)
+IMATRIX_QUANT_IDS: tuple[str, ...] = (
+    "iq1_s", "iq1_m", "iq2_xxs", "iq2_xs", "iq2_s", "iq2_m",
+    "iq3_xxs", "iq3_s", "iq3_m", "iq4_nl", "iq4_xs",
+)
+# Legacy note: the former dynamic_v2 flag and the q4_k_xl/q3_k_xl/q2_k_xl
+# ("UD-* Dynamic 2.0") ids were REMOVED (plan 2026-08-31) —
+# save_pretrained_gguf cannot produce them (the UD mixes are proprietary
+# download-only). UD_INFO_FOOTER (added in T3) explains this in the UI.
+
 # approx_bpw = approximate bits-per-weight (helps estimate size vs quality).
+# 35 official unsloth quant ids (plan 2026-08-31): the 24 ALLOWED_QUANTS in save.py
+# dict order, then the 11 IMATRIX_QUANTS in save.py dict order. approx_bpw is a
+# positional arg here, but needs_imatrix is ALWAYS passed by keyword -- that flag
+# must never again share a positional slot with a removed field (see git history:
+# it briefly occupied the old dynamic_v2 slot and broke every app mount).
+# 35 official unsloth quant ids (plan 2026-08-31): the 24 ALLOWED_QUANTS in save.py
+# dict order, then the 11 IMATRIX_QUANTS in save.py dict order. approx_bpw is a
+# positional arg here, but needs_imatrix is ALWAYS passed by keyword -- that flag
+# must never again share a positional slot with a removed field (see git history:
+# it briefly occupied the old dynamic_v2 slot and broke every app mount).
+# 35 official unsloth quant ids (plan 2026-08-31): the 24 ALLOWED_QUANTS in save.py
+# dict order, then the 11 IMATRIX_QUANTS in save.py dict order. approx_bpw is a
+# positional arg here, but needs_imatrix is ALWAYS passed by keyword -- that flag
+# must never again share a positional slot with a removed field (see git history:
+# it briefly occupied the old dynamic_v2 slot and broke every app mount).
+# 35 official unsloth quant ids (plan 2026-08-31): the 24 ALLOWED_QUANTS in save.py
+# dict order, then the 11 IMATRIX_QUANTS in save.py dict order. EVERY field after
+# `backend` is passed BY KEYWORD -- a positional slot here is how needs_imatrix once
+# silently inherited a removed field's position and crashed every app mount.
 METHODS: list[QuantMethod] = [
-    QuantMethod("f16", "F16 (16-bit, lossless)", Family.GGUF, Backend.UNSLOTH, False, 16.0,
-                "Full 16-bit. Largest, lossless. Best as an intermediate before manual quant."),
-    QuantMethod("q8_0", "Q8_0 (8-bit)", Family.GGUF, Backend.UNSLOTH, False, 8.6,
-                "8-bit. Near-lossless, high memory use. Fast conversion."),
-    QuantMethod("q6_k", "Q6_K (6-bit)", Family.GGUF, Backend.UNSLOTH, False, 6.6,
-                "6-bit K-quant. Very good quality, fairly large."),
-    QuantMethod("q5_k_m", "Q5_K_M (5-bit, recommended)", Family.GGUF, Backend.UNSLOTH, False, 5.5,
-                "Recommended 5-bit. Near-lossless quality with good size."),
-    QuantMethod("q5_k_s", "Q5_K_S (5-bit small)", Family.GGUF, Backend.UNSLOTH, False, 5.5,
-                "5-bit small. Uses Q5_K for all tensors."),
-    QuantMethod("q5_0", "Q5_0", Family.GGUF, Backend.UNSLOTH, False, 5.5, "Higher accuracy, slower inference."),
-    QuantMethod("q5_1", "Q5_1 (Dynamic 2.0 format)", Family.GGUF, Backend.UNSLOTH, True, 5.5,
-                "New Dynamic 2.0 efficiency format (ARM / Apple Silicon)."),
-    QuantMethod("q4_k_m", "Q4_K_M (4-bit, recommended)", Family.GGUF, Backend.UNSLOTH, False, 4.85,
-                "Recommended 4-bit. Good balance of size and quality."),
-    QuantMethod("q4_k_s", "Q4_K_S (4-bit small)", Family.GGUF, Backend.UNSLOTH, False, 4.5,
-                "4-bit small. Q4_K for all tensors."),
-    QuantMethod("q4_0", "Q4_0", Family.GGUF, Backend.UNSLOTH, False, 4.55, "Original 4-bit method."),
-    QuantMethod("q4_1", "Q4_1 (Dynamic 2.0 format)", Family.GGUF, Backend.UNSLOTH, True, 4.8,
-                "New Dynamic 2.0 format. Higher accuracy than Q4_0."),
-    QuantMethod("q4_nl", "Q4_NL (Dynamic 2.0 format)", Family.GGUF, Backend.UNSLOTH, True, 4.5,
-                "New Dynamic 2.0 efficiency format for Apple Silicon / ARM."),
-    QuantMethod("q3_k_m", "Q3_K_M (3-bit)", Family.GGUF, Backend.UNSLOTH, False, 3.9,
-                "3-bit. Q4_K for key tensors."),
-    QuantMethod("q3_k_l", "Q3_K_L (3-bit large)", Family.GGUF, Backend.UNSLOTH, False, 4.0, "3-bit large."),
-    QuantMethod("q3_k_s", "Q3_K_S (3-bit small)", Family.GGUF, Backend.UNSLOTH, False, 3.5,
-                "3-bit small. Q3_K for all tensors."),
-    QuantMethod("q3_k_xs", "Q3_K_XS (3-bit XS)", Family.GGUF, Backend.UNSLOTH, False, 3.3, "3-bit extra-small."),
-    QuantMethod("q2_k", "Q2_K (2-bit)", Family.GGUF, Backend.UNSLOTH, False, 2.96,
-                "2-bit. Q4_K for key tensors."),
-    QuantMethod("iq4_nl", "IQ4_NL (imatrix)", Family.GGUF, Backend.UNSLOTH, False, 4.5,
-                "Importance-matrix 4-bit (needs an imatrix file)."),
-    QuantMethod("iq3_xxs", "IQ3_XXS (imatrix)", Family.GGUF, Backend.UNSLOTH, False, 3.06, "Importance quant, very small."),
-    QuantMethod("iq2_xxs", "IQ2_XXS (imatrix)", Family.GGUF, Backend.UNSLOTH, False, 2.06, "Importance quant, tiny."),
-    QuantMethod("iq2_xs", "IQ2_XS (imatrix)", Family.GGUF, Backend.UNSLOTH, False, 2.31, "Importance quant."),
-    # Dynamic 2.0 per-layer selective variants (the headline feature)
-    QuantMethod("q4_k_xl", "UD-Q4_K_XL (Dynamic 2.0)", Family.GGUF, Backend.UNSLOTH, True, 4.5,
-                "Dynamic 2.0 per-layer selective. Best quality at ~Q4 size. Output: UD-Q4_K_XL."),
-    QuantMethod("q3_k_xl", "UD-Q3_K_XL (Dynamic 2.0)", Family.GGUF, Backend.UNSLOTH, True, 3.5,
-                "Dynamic 2.0 per-layer selective, smaller. Output: UD-Q3_K_XL."),
-    QuantMethod("q2_k_xl", "UD-Q2_K_XL (Dynamic 2.0)", Family.GGUF, Backend.UNSLOTH, True, 2.7,
-                "Dynamic 2.0 per-layer selective, smallest. Output: UD-Q2_K_XL."),
+    QuantMethod("not_quantized", "Not quantized (keep dtype)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=16.0,
+                description="Recommended. Fast conversion. Slow inference, big files. Keeps the "
+                             "model dtype (bf16/f16)."),
+    QuantMethod("fast_quantized", "Fast quantized (-> Q8_0)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=8.5,
+                description="Recommended. Fast conversion. OK inference, OK file size. Maps to "
+                             "q8_0."),
+    QuantMethod("quantized", "Quantized (-> Q4_K_M)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.85,
+                description="Recommended. Slow conversion. Fast inference, small files. Maps to "
+                             "q4_k_m."),
+    QuantMethod("f32", "F32 (32-bit, lossless)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=32.0,
+                description="Full 32-bit. Retains 100% accuracy; very slow and memory hungry."),
+    QuantMethod("bf16", "BF16 (bfloat16, lossless)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=16.0,
+                description="Bfloat16 - fastest conversion, retains 100% accuracy. Slow and "
+                             "memory hungry."),
+    QuantMethod("f16", "F16 (16-bit, lossless)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=16.0,
+                description="Full 16-bit. Largest, lossless. Best as an intermediate before "
+                             "manual quant."),
+    QuantMethod("q8_0", "Q8_0 (8-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=8.5,
+                description="Fast conversion. High resource use, but generally acceptable."),
+    QuantMethod("q4_k_m", "Q4_K_M (4-bit, recommended)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.85,
+                description="Recommended. Uses Q6_K for half of the attention.wv and "
+                             "feed_forward.w2 tensors, else Q4_K."),
+    QuantMethod("q5_k_m", "Q5_K_M (5-bit, recommended)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=5.5,
+                description="Recommended. Uses Q6_K for half of the attention.wv and "
+                             "feed_forward.w2 tensors, else Q5_K."),
+    QuantMethod("q2_k", "Q2_K (2-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.35,
+                description="Uses Q4_K for the attention.vw and feed_forward.w2 tensors, Q2_K "
+                             "for the other tensors."),
+    QuantMethod("q2_k_l", "Q2_K_L (2-bit large, Unsloth preset)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.4,
+                description="Unsloth preset: Q2_K body with Q8_0 output/token embeddings - "
+                             "higher quality than plain Q2_K."),
+    QuantMethod("q3_k_l", "Q3_K_L (3-bit large)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.0,
+                description="Uses Q5_K for the attention.wv, attention.wo, and feed_forward.w2 "
+                             "tensors, else Q3_K."),
+    QuantMethod("q3_k_m", "Q3_K_M (3-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.9,
+                description="Uses Q4_K for the attention.wv, attention.wo, and feed_forward.w2 "
+                             "tensors, else Q3_K."),
+    QuantMethod("q3_k_s", "Q3_K_S (3-bit small)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.5,
+                description="Uses Q3_K for all tensors."),
+    QuantMethod("q4_0", "Q4_0 (4-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.55,
+                description="Original 4-bit quant method."),
+    QuantMethod("q4_1", "Q4_1 (4-bit, +bias)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.8,
+                description="Higher accuracy than q4_0 but not as high as q5_0; quicker "
+                             "inference than q5 models."),
+    QuantMethod("q4_k_s", "Q4_K_S (4-bit small)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.5,
+                description="Uses Q4_K for all tensors."),
+    QuantMethod("q4_k", "Q4_K (alias of Q4_K_M)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.85,
+                description="Alias for q4_k_m."),
+    QuantMethod("q5_k", "Q5_K (alias of Q5_K_M)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=5.5,
+                description="Alias for q5_k_m."),
+    QuantMethod("q5_0", "Q5_0 (5-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=5.5,
+                description="Higher accuracy, higher resource usage and slower inference."),
+    QuantMethod("q5_1", "Q5_1 (5-bit, +bias)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=5.5,
+                description="Even higher accuracy, resource usage and slower inference."),
+    QuantMethod("q5_k_s", "Q5_K_S (5-bit small)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=5.5,
+                description="Uses Q5_K for all tensors."),
+    QuantMethod("q6_k", "Q6_K (6-bit)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=6.6,
+                description="Uses Q8_K for all tensors. Very good quality, fairly large."),
+    QuantMethod("q3_k_xs", "Q3_K_XS (3-bit XS)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.3,
+                description="3-bit extra-small quantization."),
+    QuantMethod("iq1_s", "IQ1_S (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=1.56,
+                description="1.56 bpw. Smallest, lowest quality. Needs an "
+                             "imatrix.", needs_imatrix=True),
+    QuantMethod("iq1_m", "IQ1_M (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=1.75,
+                description="1.75 bpw. Very small. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq2_xxs", "IQ2_XXS (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=2.06,
+                description="2.06 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq2_xs", "IQ2_XS (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=2.31,
+                description="2.31 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq2_s", "IQ2_S (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=2.5,
+                description="2.5 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq2_m", "IQ2_M (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=2.7,
+                description="2.7 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq3_xxs", "IQ3_XXS (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.06,
+                description="3.06 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq3_s", "IQ3_S (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.44,
+                description="3.44 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq3_m", "IQ3_M (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=3.66,
+                description="3.66 bpw. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq4_nl", "IQ4_NL (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.5,
+                description="4.5 bpw non-linear. Needs an imatrix.", needs_imatrix=True),
+    QuantMethod("iq4_xs", "IQ4_XS (imatrix)", Family.GGUF, Backend.UNSLOTH,
+                approx_bpw=4.25,
+                description="4.25 bpw. Needs an imatrix.", needs_imatrix=True),
 ]
 
 METHODS_BY_ID: dict[str, QuantMethod] = {m.id: m for m in METHODS}
@@ -417,7 +537,9 @@ def eval_visible_when(predicate: str | None, context: dict[str, Any]) -> bool:
 # Display helper (used by the GGUF panel + list view)
 # --------------------------------------------------------------------------- #
 def list_line(method: QuantMethod) -> str:
-    badge = "[DYNAMIC 2.0] " if method.dynamic_v2 else ""
+    # "[IMATRIX] " replaces the old "[DYNAMIC 2.0] " badge: it marks the 11
+    # official IQ* ids, which unsloth refuses to quantize without imatrix_file=.
+    badge = "[IMATRIX] " if method.needs_imatrix else ""
     bpw = f"{method.approx_bpw:>4}bpw " if method.approx_bpw else "     "
     return f"{method.id:<12} {bpw} {badge}{method.description}"
 

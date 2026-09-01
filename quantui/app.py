@@ -1018,7 +1018,7 @@ class QuantApp(handlers.HandlersMixin, App):
         mid = self.selected_method()
         m = METHODS_BY_ID.get(mid)
         if m:
-            badge = "[DYNAMIC 2.0] " if m.dynamic_v2 else ""
+            badge = "[IMATRIX] " if m.needs_imatrix else ""
             self.query_one("#method_info", Static).update(f"{badge}{m.description}")
         else:
             self.query_one("#method_info", Static).update("Custom method — passed through to Unsloth.")

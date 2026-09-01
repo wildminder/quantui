@@ -43,7 +43,7 @@ async def test_done_emits_toast_and_bell(tmp_path, monkeypatch):
             family=Family.GGUF,
             gguf=rc_mod.GgufConfig(
                 model=str(tmp_path), output=str(tmp_path / "out"),
-                method="q4_k_xl", pybin=sys.executable,
+                method="q4_k_m", pybin=sys.executable,
             ),
         )
         a._read_config = lambda: cfg
@@ -70,7 +70,7 @@ async def test_failed_run_emits_error_toast(tmp_path, monkeypatch):
             family=Family.GGUF,
             gguf=rc_mod.GgufConfig(
                 model=str(tmp_path), output=str(tmp_path / "out"),
-                method="q4_k_xl", pybin=sys.executable,
+                method="q4_k_m", pybin=sys.executable,
             ),
         )
         a._read_config = lambda: cfg
