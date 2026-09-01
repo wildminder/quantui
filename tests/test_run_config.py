@@ -397,3 +397,68 @@ def test_ggufconfig_method_list():
     assert g.method_list == ["q8_0"]
 
 
+
+
+# --------------------------------------------------------------------------- #
+# T5 (plan 2026-08-31-gguf-unsloth-parity): validate_gguf gates
+# --------------------------------------------------------------------------- #
+def _g(method, imatrix="", **kw):
+    return rc.GgufConfig(
+        model=sys.executable, output="/tmp/out", pybin=sys.executable,
+        method=method, imatrix=imatrix, **kw,
+    )
+
+
+def test_validate_blocks_iq_without_imatrix():
+    # unsloth raises RuntimeError (after a FULL model load) unless imatrix_file=
+    # is passed for every IQ* id; the TUI must refuse BEFORE spending the load.
+    errs = rc.validate_gguf(_g("iq2_xs"))
+    assert len(errs) == 1
+    assert "iq2_xs" in errs[0]
+    assert "imatrix" in errs[0].lower()
+
+
+def test_validate_allows_iq_with_imatrix_path(tmp_path):
+    imatrix = tmp_path / "imatrix.dat"
+    imatrix.write_bytes(b"raw")
+    assert rc.validate_gguf(_g("iq2_xs", str(imatrix))) == []
+
+
+def test_validate_allows_iq_with_auto():
+    # "auto" = fetch the upstream Unsloth imatrix at run time; existence
+    # cannot be checked locally (architect-ratified boundary).
+    assert rc.validate_gguf(_g("iq2_xs", "auto")) == []
+
+
+def test_validate_rejects_missing_imatrix_path(tmp_path):
+    missing = tmp_path / "nope.dat"
+    errs = rc.validate_gguf(_g("iq2_xs", str(missing)))
+    assert len(errs) == 1
+    assert "not found" in errs[0]
+
+
+def test_validate_unknown_id_error():
+    # The old custom free-text path let typos through; unsloth would fail
+    # after the model load. The whitelist catches them up front.
+    errs = rc.validate_gguf(_g("bogus"))
+    assert len(errs) == 1
+    assert "bogus" in errs[0]
+
+
+def test_validate_multi_id_ok():
+    # Comma-joined ids all in the whitelist, none IQ* -> no error.
+    assert rc.validate_gguf(_g("q4_k_m,q5_k_m")) == []
+
+
+def test_validate_multi_id_partial_failure():
+    # One bad id among valid ones: exactly that id is named.
+    errs = rc.validate_gguf(_g("q4_k_m, bogus ,iq2_s"))
+    assert len(errs) == 2  # bogus (unknown) + iq2_s (needs imatrix)
+    assert any("bogus" in e for e in errs)
+    assert any("iq2_s" in e for e in errs)
+
+
+def test_validate_single_id_unchanged(tmp_path):
+    # Regression pin: today's passing cases still pass.
+    assert rc.validate_gguf(_g("q4_k_m")) == []
+    assert rc.validate_gguf(_g("q8_0")) == []
