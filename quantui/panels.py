@@ -6,8 +6,8 @@ data-driven ComfyUI block). They are pure widget construction -- no app state, n
 to them (see app.py). Widget ids are preserved exactly so the headless tests keep
 passing.
 
-The three trivial derived constants (SELECT_OPTIONS / DEFAULT_METHOD / DEFAULT_CTQ_FORMAT)
-mirror ``app.py``; they are computed from ``quant_methods`` data so this module does not
+The derived constants (DEFAULT_METHOD / DEFAULT_CTQ_FORMAT) mirror
+``app.py``; they are computed from ``quant_methods`` data so this module does not
 need to import the composition root (avoids a circular import).
 """
 
@@ -34,14 +34,15 @@ from textual.widgets import (
 from .quant_methods import (
     COMFY_FORMATS,
     DEFAULT_GGUF_METHOD,
-    METHODS,
+    UD_INFO_FOOTER,
     format_options,
     preset_options,
 )
 
-# --- derived constants (mirror app.py; source of truth is quant_methods) -------
-SELECT_OPTIONS = [(m.label, m.id) for m in METHODS]
-# T3b: re-export, NOT a redefinition (see app.py note).
+# --- derived constants (source of truth is quant_methods) ---------------------
+# T8 (plan 2026-08-31-gguf-unsloth-parity): the (label, id) pairs are gone --
+# the GGUF panel mounts a free-text #method Input, and the only remaining
+# method Select is the wizard's own SELECT_METHOD_OPTIONS (screens_wizard.py).
 DEFAULT_METHOD = DEFAULT_GGUF_METHOD
 DEFAULT_CTQ_FORMAT = COMFY_FORMATS[0].id  # fp8_e4m3
 
@@ -367,10 +368,20 @@ def build_gguf_panel() -> VerticalScroll:
         Label("2. Output folder"),
         Horizontal(Input(id="output", placeholder="/path/to/output"), Button("Browse", id="browse_out"), classes="field"),
         Label("3. Quantization method"),
-        Select(SELECT_OPTIONS, id="method", value=DEFAULT_METHOD, allow_blank=False),
+        # T8 (plan 2026-08-31-gguf-unsloth-parity): Select -> Input. A 35-entry
+        # dropdown cannot express multi-method runs ("q4_k_m, q5_k_m"); free
+        # text + validate_gguf's whitelist (T5) catches typos the Select used
+        # to prevent. Same #method id: _read_config / profiles keep working.
+        Input(id="method", value=DEFAULT_METHOD,
+              placeholder="e.g. q4_k_m — comma-separate for multiple"),
         Static(id="method_info"),
+        Static(UD_INFO_FOOTER, id="ud_footer"),
         Collapsible(
-            Label("Custom method (optional, overrides the dropdown)"),
+            Label("Imatrix (required for IQ* quants)"),
+            Input(id="imatrix_path",
+                  placeholder="imatrix .dat/.gguf path (required for IQ* quants)"),
+            Checkbox("Auto (fetch upstream Unsloth imatrix)", id="imatrix_auto"),
+            Label("Custom method (optional, overrides the field above)"),
             Input(id="custom", placeholder="e.g. q4_k_m, q5_k_m — comma-separate for multiple"),
             Label("Worker Python interpreter (must have unsloth + CUDA)"),
             Input(id="pybin", value=sys.executable),

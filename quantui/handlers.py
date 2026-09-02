@@ -17,7 +17,15 @@ import time
 
 from textual import work
 from textual.css.query import NoMatches
-from textual.widgets import Button, Checkbox, Input, Label, RadioSet, Select
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Input,
+    Label,
+    RadioButton,
+    RadioSet,
+    Select,
+)
 
 from . import capabilities, run_config, screens
 from .quant_methods import (
@@ -40,10 +48,28 @@ class HandlersMixin:
     # ---- ctq helpers ---------------------------------------------------------
 
     def selected_method(self) -> str:
+        # T9 (plan 2026-08-31-gguf-unsloth-parity): #method is an Input now
+        # (multi-method free text, T8). Custom override still wins; BOTH paths
+        # strip whitespace. A comma list is returned verbatim -- the same
+        # parse_methods downstream (validate_gguf / worker) splits it.
         custom = self.query_one("#custom", Input).value.strip()
         if custom:
             return custom
-        return str(self.query_one("#method", Select).value)
+        return self.query_one("#method", Input).value.strip()
+
+    def imatrix_value(self) -> str:
+        """The GGUF imatrix setting: "" | "auto" | local path.
+
+        "auto" (the #imatrix_auto checkbox) wins over the path field --
+        checking "fetch upstream" while a stale path sits in the field must
+        not silently load the stale file.
+        """
+        try:
+            if self.query_one("#imatrix_auto", Checkbox).value:
+                return "auto"
+        except NoMatches:
+            return ""
+        return self.query_one("#imatrix_path", Input).value.strip()
 
     def ctq_format(self) -> str:
         val = self.query_one("#ctq_format", Select).value
@@ -139,19 +165,38 @@ class HandlersMixin:
 
     # ---- input handlers ------------------------------------------------------
 
-    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        # Only the top-level family RadioSet switches the whole UI. Other RadioSets
-        # inside a panel (e.g. #ctq_output_mode) must NOT trigger a family change,
-        # otherwise selecting "Single file (merge)" flipped the tab back to GGUF.
-        if event.radio_set.id != "family":
-            return
-        rid = event.pressed.id
-        self.family = Family.COMFY if rid == "fam_comfy" else Family.GGUF
-        is_comfy = self.family == Family.COMFY
-        self.query_one("#gguf_panel").display = not is_comfy
-        self.query_one("#comfy_panel").display = is_comfy
+    def _set_family(self, family: Family, *, press_radio: bool = True) -> None:
+        """Switch the active family **now** -- not after the radio message pumps.
+
+        ``RadioButton.value = True`` only *posts* ``RadioSet.Changed``; the
+        handler that assigns ``self.family`` runs on the NEXT message pump
+        cycle. Any caller that switches family and then acts inside the SAME
+        synchronous block (``_on_wizard_done`` -> ``action_run``) therefore
+        read a STALE family in ``_read_config`` and validated the wrong panel.
+        That latent bug was masked while ``#method`` was a Select (a comfy
+        wizard run validated as GGUF but happened to pass); free-text method
+        entry (T8) made it fatal. Both paths now converge here.
+
+        The work is idempotent: the radio press re-enters this method via the
+        ``RadioSet.Changed`` message, and that second call is a no-op.
+        """
+        changed = self.family != family
+        self.family = family
+        is_comfy = family == Family.COMFY
+        if press_radio:
+            try:
+                self.query_one(
+                    "#fam_comfy" if is_comfy else "#fam_gguf", RadioButton
+                ).value = True
+            except NoMatches:
+                pass  # family radio not mounted
+        for wid, visible in (("#gguf_panel", not is_comfy), ("#comfy_panel", is_comfy)):
+            try:
+                self.query_one(wid).display = visible
+            except NoMatches:
+                pass  # panel not mounted
         self.refresh_ctq_visibility()
-        if is_comfy:
+        if is_comfy and changed:
             try:
                 pybin = self.query_one("#pybin_ctq", Input).value.strip() or sys.executable
             except Exception:
@@ -159,12 +204,22 @@ class HandlersMixin:
             self.refresh_capabilities(pybin)
         self.set_status("Ready." if not is_comfy else "ComfyUI mode.")
 
+    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        # Only the top-level family RadioSet switches the whole UI. Other RadioSets
+        # inside a panel (e.g. #ctq_output_mode) must NOT trigger a family change,
+        # otherwise selecting "Single file (merge)" flipped the tab back to GGUF.
+        if event.radio_set.id != "family":
+            return
+        rid = event.pressed.id
+        self._set_family(
+            Family.COMFY if rid == "fam_comfy" else Family.GGUF, press_radio=False
+        )
+
     def on_select_changed(self, event: Select.Changed) -> None:
         sid = event.select.id
-        if sid == "method":
-            self.update_method_info()
-            self.auto_suggest_output(Family.GGUF)
-        elif sid in ("ctq_format", "scaling_mode"):
+        # NOTE: there is no "method" Select anymore (T8) -- #method is an Input,
+        # handled by on_input_changed / on_input_submitted below.
+        if sid in ("ctq_format", "scaling_mode"):
             # scaling_mode drives chained visibility (block_size for block;
             # convrot + group size for row), so re-evaluate like a format change.
             self.refresh_ctq_visibility()
@@ -181,14 +236,27 @@ class HandlersMixin:
             self.refresh_output_name()  # tags gain/lose convrot+gs
 
     def on_input_changed(self, event) -> None:
-        """Live .pt detection while the user types/pastes into #ctq_input."""
-        if getattr(event.input, "id", "") == "ctq_input":
+        """Live .pt detection (#ctq_input) + live method info (#method).
+
+        T9: #method is free text now, so the description line must refresh as
+        the user types -- including the "[IMATRIX]" marker for IQ* quants.
+        Output auto-suggest is deliberately NOT fired per keystroke (noisy);
+        it runs on Enter via :meth:`on_input_submitted`.
+        """
+        iid = getattr(event.input, "id", "")
+        if iid == "ctq_input":
             self.update_pt_suggest()
             self.update_audit_button()
+        elif iid == "method":
+            self.update_method_info()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         iid = event.input.id
-        if iid == "model":
+        if iid == "method":
+            # Enter = "committed": now it is worth re-deriving the output name.
+            self.update_method_info()
+            self.auto_suggest_output(Family.GGUF)
+        elif iid == "model":
             self.auto_suggest_output(Family.GGUF)
         elif iid == "ctq_input":
             self.auto_suggest_output(Family.COMFY)
@@ -598,7 +666,10 @@ class HandlersMixin:
 
     # ---- capability badge (non-blocking) -------------------------------------
 
-    @work(thread=True)
+    # Own group + exclusive: a run (``action_run`` is exclusive in the DEFAULT
+    # group) must never cancel a capability probe, and a new probe cancels the
+    # previous one so two probes cannot race the badge out of order.
+    @work(thread=True, group="capabilities", exclusive=True)
     def refresh_capabilities(self, pybin: str | None = None) -> None:
         """Probe the ctq interpreter and render advisory warnings in the badge."""
         if pybin is None:
@@ -645,6 +716,7 @@ class HandlersMixin:
             model=self.query_one("#model", Input).value.strip(),
             output=self.query_one("#output", Input).value.strip(),
             method=self.selected_method(),
+            imatrix=self.imatrix_value(),
             pybin=self.query_one("#pybin", Input).value.strip(),
             max_seq_length=self.query_one("#maxseq", Input).value.strip() or "4096",
             load_in_4bit=self.query_one("#load4", Checkbox).value,

@@ -15,7 +15,8 @@ from textual.widgets import Button, Input, Label, Select, Static
 
 from quantui.quant_methods import COMFY_FORMATS, DEFAULT_GGUF_METHOD, METHODS
 
-# (label, id) pairs for the method Select — mirrors panels.SELECT_OPTIONS.
+# (label, id) pairs for the wizard's own method Select. The MAIN form uses a
+# free-text #method Input (T8), so these pairs are wizard-only.
 SELECT_METHOD_OPTIONS = [(m.label, m.id) for m in METHODS]
 
 

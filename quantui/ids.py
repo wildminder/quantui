@@ -47,6 +47,11 @@ OPEN_OUT_FOLDER = "#open_out_folder"
 PT_SUGGEST = "#pt_suggest"
 PT_CONVERT_BTN = "#pt_convert_btn"
 
+# GGUF imatrix + UD footer (T8, plan 2026-08-31-gguf-unsloth-parity) -------------
+IMATRIX_PATH = "#imatrix_path"
+IMATRIX_AUTO = "#imatrix_auto"
+UD_FOOTER = "#ud_footer"
+
 
 def all_ids() -> tuple[str, ...]:
     """Every contract id that must exist in the composed app *right now*.
@@ -75,4 +80,7 @@ def all_ids() -> tuple[str, ...]:
         OPEN_OUT_FOLDER,
         PT_SUGGEST,
         PT_CONVERT_BTN,
+        IMATRIX_PATH,
+        IMATRIX_AUTO,
+        UD_FOOTER,
     )
