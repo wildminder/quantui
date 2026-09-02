@@ -6,7 +6,66 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Changed
-- **Ruff debt paid down to zero (NTH-008) — 27 findings → 0, and the gate is
+- **GGUF registry aligned to the official Unsloth quant surface (35 ids).**
+  The method list now mirrors `unsloth_zoo`'s `save_pretrained_gguf` exactly:
+  the 24 `ALLOWED_QUANTS` ids plus the 11 `IMATRIX_QUANTS` ids, in the official
+  order, each with approximate bits-per-weight from the llama.cpp qtype tables.
+  The fake `q4_nl` id (never official — the real id is the imatrix-gated
+  `iq4_nl`) and the `UD-*` Dynamic ids (`q4_k_xl` / `q3_k_xl` / `q2_k_xl`) are
+  gone: UD mixes are proprietary download-only GGUFs that
+  `save_pretrained_gguf` cannot produce, so listing them lied to the user. The
+  UI now carries a footer explaining where to download official UD GGUFs.
+- **`QuantMethod` carries `needs_imatrix`** and every trailing dataclass field
+  is passed by keyword — a removed field can never silently inherit another
+  flag's positional slot again (that bug class caused 126 test failures once).
+  `list_line` badged `[IMATRIX]` instead of the removed `[DYNAMIC 2.0]`.
+- **The GGUF method field is free text now (was a 35-entry dropdown).** A
+  dropdown cannot express multi-method runs; the field accepts a comma list
+  (`q4_k_m, q5_k_m, q8_0`) quantized left-to-right in one run. Validation
+  (below) catches typos the dropdown used to prevent. The method description
+  line updates live while typing, including the imatrix hint for `iq*` ids.
+- **Run-time validation gate for GGUF methods (T5).** Unknown ids and `iq*`
+  methods without an imatrix are refused *before* the worker starts — unsloth
+  itself only fails after a full model load, so this turns a multi-minute
+  failure into an instant one. `auto` skips the existence check (fetched at
+  run time).
+- **Default method is `q4_k_m` everywhere** (single-homed as
+  `DEFAULT_GGUF_METHOD` in `quant_methods`). The wizard previously degraded to
+  `not_quantized`, silently wasting the run.
+- **Saved profiles referencing removed method ids downgrade on load.**
+  `profiles_store.get_profile` filters dead ids out of `method`/`custom`
+  (comma lists keep their valid parts; an all-dead custom is emptied) and
+  records a visible `_notes` entry. The on-disk store is not rewritten on
+  read.
+
+### Added
+- **End-to-end imatrix support for IQ* quantizations.** The GGUF panel's
+  Advanced section gains an *Imatrix* path field plus an **Auto** checkbox
+  (fetch the upstream Unsloth imatrix); `--imatrix` is emitted to the worker
+  only when set, and `save_pretrained_gguf` / `push_to_hub_gguf` receive
+  `imatrix_file=` for every `iq*` method. The worker enforces the same gate
+  **before** importing unsloth (a missing imatrix fails in milliseconds, not
+  after a model load). Profiles round-trip the imatrix setting; the Auto
+  checkbox wins over a stale path.
+- **Multi-method runs.** `parse_methods()` splits/normalizes comma lists; the
+  worker accepts `--method q4_k_m, q5_k_m` and quantizes each id in order;
+  `--list-methods` prints all 35 ids with `[IMATRIX]` markers.
+- **Synchronous family switching (latent bug fix).** Pressing the family radio
+  only *posted* `RadioSet.Changed`, so a caller that switched family and
+  immediately ran (wizard / profile apply → Run) validated the **wrong**
+  family's config. Previously masked by the old dropdown rejecting cross-family
+  ids; free-text entry made it fatal. All family switches now apply instantly
+  via a shared `_set_family` helper.
+- **Capability probe moved to its own worker group.** `action_run` is an
+  `exclusive=True` worker in the default group, so with the (now-synchronous)
+  family switch starting the probe first, a run cancelled the probe. The probe
+  runs in its own `capabilities` group instead.
+- **`[IMATRIX]` badge rendering fix.** Textual's markup parser accepts
+  UPPERCASE tags, so the literal badge was consumed as a style and vanished
+  from the UI. Badges are now wrapped in real bold-yellow markup with the
+  literal brackets escaped.
+
+### Ruff debt paid down to zero (NTH-008) — 27 findings → 0, and the gate is
   now zero-tolerance.** Fixed in rule-homogeneous batches: E741 ×11 (ambiguous
   `l` → `line` in the RichLog-line comprehensions), B007 ×4 (unused loop vars →
   `_`), E402 ×3 (`stream_parser` imports hoisted above the
