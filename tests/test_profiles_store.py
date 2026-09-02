@@ -94,3 +94,115 @@ def test_save_creates_missing_dir(tmp_path):
     d = str(tmp_path / "nested" / "cfg")
     ps.save_profile("p", {"x": 1}, config_dir=d)
     assert os.path.exists(os.path.join(d, ps.STORE_FILENAME))
+
+
+# --------------------------------------------------------------------------- #
+# T10 (plan 2026-08-31-gguf-unsloth-parity): profiles saved before the
+# registry rebuild may reference method ids that no longer exist
+# (q4_k_xl / q3_k_xl / q2_k_xl were proprietary UD mixes; q4_nl never existed
+# as an official id). Loading must downgrade instead of crashing or silently
+# running a dead id.
+# --------------------------------------------------------------------------- #
+def test_old_profile_q4_k_xl_downgrades(tmp_path):
+    d = str(tmp_path)
+    ps.save_profile(
+        "old", {"family": "gguf", "method": "q4_k_xl"}, config_dir=d
+    )
+    prof = ps.get_profile("old", config_dir=d)
+    assert prof is not None
+    assert prof["method"] == "q4_k_m"
+    # The downgrade must be visible, not silent.
+    assert "downgrade" in prof.get("_notes", "").lower()
+
+
+def test_old_profile_q3_k_xl_downgrades(tmp_path):
+    d = str(tmp_path)
+    ps.save_profile(
+        "old", {"family": "gguf", "method": "q3_k_xl"}, config_dir=d
+    )
+    prof = ps.get_profile("old", config_dir=d)
+    assert prof is not None
+    assert prof["method"] == "q4_k_m"
+
+
+def test_old_custom_q4_k_xl_downgrades(tmp_path):
+    d = str(tmp_path)
+    ps.save_profile(
+        "old",
+        {"family": "gguf", "method": "q4_k_m", "custom": "q4_k_xl"},
+        config_dir=d,
+    )
+    prof = ps.get_profile("old", config_dir=d)
+    assert prof is not None
+    assert prof["custom"] == ""
+    assert prof["method"] == "q4_k_m"
+
+
+def test_old_profile_q4_nl_downgrades(tmp_path):
+    # q4_nl never existed (the real id is the imatrix-gated iq4_nl).
+    d = str(tmp_path)
+    ps.save_profile(
+        "old", {"family": "gguf", "method": "q4_nl"}, config_dir=d
+    )
+    prof = ps.get_profile("old", config_dir=d)
+    assert prof is not None
+    assert prof["method"] == "q4_k_m"
+
+
+def test_valid_profile_untouched(tmp_path):
+    d = str(tmp_path)
+    ps.save_profile(
+        "ok",
+        {"family": "gguf", "method": "q5_k_m", "custom": "iq2_xs"},
+        config_dir=d,
+    )
+    prof = ps.get_profile("ok", config_dir=d)
+    assert prof is not None
+    assert prof["method"] == "q5_k_m"
+    assert prof["custom"] == "iq2_xs"
+    assert "_notes" not in prof
+
+
+def test_mixed_comma_list_partially_dead(tmp_path):
+    # A comma list where SOME ids are dead: dead ids are dropped, valid ones
+    # kept (a fully-dead list degrades to the single default).
+    d = str(tmp_path)
+    ps.save_profile(
+        "mix",
+        {"family": "gguf", "method": "q4_k_xl, q5_k_m"},
+        config_dir=d,
+    )
+    prof = ps.get_profile("mix", config_dir=d)
+    assert prof is not None
+    assert prof["method"] == "q5_k_m"
+
+
+def test_recent_with_removed_id_loads():
+    # Recents are display + re-run only; a dead id in a record must never
+    # raise on from_dict (display tolerates any string).
+    rec = ps.RunRecord.from_dict(
+        {"ts": "t", "family": "gguf", "method": "q4_k_xl", "status": "success"}
+    )
+    assert rec.method == "q4_k_xl"
+    assert rec.status == "success"
+
+
+def test_no_removed_id_fixtures_remain():
+    # Grep-equivalent sweep over tests/: the dead ids may appear ONLY in the
+    # downgrade tests themselves (and registry tripwires), never as a valid
+    # fixture value elsewhere.
+    import glob
+
+    dead = ("q4_k_xl", "q3_k_xl", "q2_k_xl", "q4_nl")
+    allowed = (
+        "test_profiles_store.py",  # this downgrade suite
+        "test_quant_methods.py",   # registry tripwires (absence asserts)
+    )
+    for path in glob.glob(os.path.join(os.path.dirname(__file__), "test_*.py")):
+        base = os.path.basename(path)
+        if base in allowed:
+            continue
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            src = fh.read()
+        for gone in dead:
+            assert gone not in src, f"{base} still references dead id {gone}"

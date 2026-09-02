@@ -30,6 +30,15 @@ MAX_RECENTS = 20
 # (S2.5 resume prompt). worker.py writes this when a GGUF save is interrupted.
 PARTIAL_MARKER = ".quantui_partial"
 
+# T10 (plan 2026-08-31-gguf-unsloth-parity): method ids that were removed
+# from the registry and therefore from unsloth's official surface. Profiles
+# saved before the rebuild may reference them; load must downgrade instead
+# of crashing or silently running a dead id. q4_nl never existed (the real
+# id is the imatrix-gated iq4_nl); the *_k_xl trio were proprietary UD mixes.
+REMOVED_METHOD_IDS = frozenset({"q4_k_xl", "q3_k_xl", "q2_k_xl", "q4_nl"})
+# The fallback for a fully-dead method / custom list.
+DOWNGRADE_METHOD = "q4_k_m"
+
 
 @dataclass
 class RunRecord:
@@ -98,6 +107,52 @@ def save_store(store: dict, config_dir: str | None = None) -> None:
 # --------------------------------------------------------------------------- #
 # Profiles (S2.4)
 # --------------------------------------------------------------------------- #
+def _downgrade_method_list(raw: str, *, keep_empty: bool = False) -> str:
+    """Filter dead ids out of a comma-separated method list.
+
+    Valid ids are kept in order. A list left empty degrades to the single
+    default UNLESS ``keep_empty`` (the custom field: an all-dead override is
+    simply removed, deferring to ``method``). Only ids known-DEAD are removed
+    -- unknown-but-not-dead ids (e.g. ids from a newer unsloth release) pass
+    through so the store never erases forward-compatible values.
+    """
+    if not raw:
+        return raw
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    kept = [p for p in parts if p not in REMOVED_METHOD_IDS]
+    if not kept:
+        return "" if keep_empty or not parts else DOWNGRADE_METHOD
+    return ", ".join(kept)
+
+
+def _downgrade_profile_fields(fields: dict) -> dict:
+    """T10 downgrade pass over one profile's fields (in place, returns it).
+
+    - ``method`` / ``custom``: dead ids dropped (comma lists filtered).
+    - Records the downgrade in ``_notes`` so it is visible, not silent.
+    - Never raises on odd shapes: a profile is user data on disk, so a
+      non-string method/custom is left untouched (validated downstream).
+    """
+    notes = []
+    for key in ("method", "custom"):
+        val = fields.get(key)
+        if not isinstance(val, str) or not val:
+            continue
+        if not any(p.strip() in REMOVED_METHOD_IDS for p in val.split(",")):
+            continue
+        fields[key] = _downgrade_method_list(val, keep_empty=(key == "custom"))
+        if key == "custom" and not fields[key]:
+            # The custom override's every id was dead: remove the override so
+            # the run defers to the (already-downgraded) method field.
+            notes.append(f"downgraded custom: dead ids removed ({val})")
+        else:
+            notes.append(f"downgraded {key}: '{val}' -> '{fields[key]}'")
+    if notes:
+        prev = fields.get("_notes", "")
+        fields["_notes"] = (prev + "; " if prev else "") + "; ".join(notes)
+    return fields
+
+
 def save_profile(
     name: str,
     cfg_dict: dict,
@@ -124,11 +179,20 @@ def save_profile(
 def get_profile(
     name: str, config_dir: str | None = None, store: dict | None = None
 ) -> dict | None:
-    """Return a deep copy of the named profile, or None when absent."""
+    """Return a deep copy of the named profile, or None when absent.
+
+    T10: the returned fields pass through the downgrade pass -- a profile
+    saved before the registry rebuild (dead method ids) loads with the dead
+    ids replaced and a visible ``_notes`` entry, never a crash. The downgrade
+    is applied to the COPY; the on-disk store keeps the original until the
+    profile is re-saved (no implicit disk writes on read).
+    """
     if store is None:
         store = load_store(config_dir)
     prof = store.get("profiles", {}).get(name)
-    return copy.deepcopy(prof) if prof is not None else None
+    if prof is None:
+        return None
+    return _downgrade_profile_fields(copy.deepcopy(prof))
 
 
 def delete_profile(
