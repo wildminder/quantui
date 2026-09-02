@@ -1,7 +1,7 @@
-# Unsloth Dynamic 2.0 GGUF Quantizer (TUI)
+# Unsloth GGUF Quantizer (TUI)
 
 A full-featured **terminal user interface** for converting HuggingFace / safetensors
-models to **GGUF** with **Unsloth Dynamic 2.0** quantization.
+models to **GGUF** with **official Unsloth quantization methods**.
 
 You only need to provide three things:
 
@@ -9,8 +9,9 @@ You only need to provide three things:
    + tokenizer files) **or** a single `.safetensors` file sitting next to a
    `config.json`.
 2. **Output folder** — where the `.gguf` will be written (auto-suggested).
-3. **Quantization method** — picked from an easy dropdown (Dynamic 2.0 variants
-   are badged), with a free-text override in case Unsloth renames a method.
+3. **Quantization method** — free text (default `q4_k_m`); comma-separate to
+   quantize several sizes in one run (`q4_k_m, q5_k_m, q8_0`). IQ* methods
+   require an **imatrix** (a local `.dat`/`.gguf` path or *Auto*).
 
 The heavy Unsloth/CUDA work runs in a separate python process (configurable via
 the "Worker Python interpreter" field), so this TUI stays light and responsive
@@ -46,9 +47,11 @@ python -m quantui
 
 - `1` Model path — type it or press **Browse** (folder/file picker).
 - `2` Output folder — auto-filled as `<model>-<METHOD>`; edit or **Browse**.
-- `3` Quantization method — dropdown. Options marked **[DYNAMIC 2.0]** use
-  Unsloth's per-layer selective quantization (e.g. `UD-Q4_K_XL`). The
-  *Custom method* box overrides the dropdown for any method Unsloth supports.
+- `3` Quantization method — free text (default `q4_k_m`). Comma-separate for
+  multiple outputs in one run (`q4_k_m, q5_k_m`). Methods marked
+  **[IMATRIX]** (the `iq*` family) need an imatrix — set a local path or
+  check **Auto** in the Advanced section (fetches the upstream Unsloth
+  imatrix). The *Custom method* box overrides the field above.
 - Optional: max sequence length, load-in-4bit, push-to-hub repo + token.
 - **Run Quantization** (or press `r`). Watch the live log on the right.
 - `q` quits.
@@ -61,7 +64,14 @@ python -m quantui
 2. `from unsloth import FastLanguageModel`.
 3. `FastLanguageModel.from_pretrained(model_name=...)` (full precision by default).
 4. `model.save_pretrained_gguf(output, tokenizer, quantization_method=method)`
-   — this is where Dynamic 2.0 per-layer selection happens.
+   — pass an `imatrix_file` too when the method is an `iq*` id. A comma list
+   quantizes each method in order into the same output folder.
+
+> **About "UD-*" / Dynamic quantizations:** Unsloth's Dynamic (UD) mixes are
+> **proprietary and download-only** — they are distributed as finished GGUFs on
+> HuggingFace (e.g. `unsloth/<model>-GGUF`) and cannot be reproduced by
+> `save_pretrained_gguf`. This tool therefore does not list them; download the
+> official UD GGUFs directly instead.
 
 ## Picking a method (size vs quality)
 
@@ -69,15 +79,21 @@ python -m quantui
 | --- | --- | --- |
 | `f16` | 16 | Lossless intermediate. |
 | `q8_0` | 8.6 | Near-lossless. |
+| `q6_k` | 6.6 | High quality; uses Q8_K for all tensors. |
 | `q5_k_m` | 5.5 | Recommended quality/size. |
-| `q4_k_m` | 4.85 | Recommended 4-bit. |
-| `UD-Q4_K_XL` (`q4_k_xl`) | ~4.5 | **Dynamic 2.0** — best quality at Q4 size. |
-| `UD-Q3_K_XL` (`q3_k_xl`) | ~3.5 | **Dynamic 2.0**, smaller. |
-| `UD-Q2_K_XL` (`q2_k_xl`) | ~2.7 | **Dynamic 2.0**, smallest. |
+| `q4_k_m` | 4.85 | Recommended 4-bit. **Default.** |
+| `q3_k_m` | 3.9 | Small. |
+| `q2_k_l` | ~3.5 | Unsloth preset (Q2_K body + Q8_0 embeddings/head). |
+| `iq4_xs` | 4.25 | Imatrix-gated; better quality per bit than `q4_k`. |
+| `iq2_xs` | 2.31 | Imatrix-gated; best ~2-bit quality. |
 
-> Method names can shift between Unsloth releases. If a method you want isn't in
-> the dropdown, type it into *Custom method* — the worker passes it straight to
-> Unsloth and warns (instead of failing) if it's unknown.
+All 35 official ids are supported (24 standard + 11 `iq*` imatrix methods);
+press **List all methods** in the TUI for the full annotated list.
+
+> Method names can shift between Unsloth releases. The method field is free
+> text validated against the official list at Run time, so a typo is caught
+> instantly instead of after the model loads. A genuinely new id from a newer
+> Unsloth can be typed into *Custom method* and is passed straight through.
 
 ## ComfyUI quantization formats (what to choose)
 
