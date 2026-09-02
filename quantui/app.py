@@ -65,7 +65,6 @@ from .live_progress import LiveProgressStore
 from .quant_methods import (
     COMFY_FORMATS,
     DEFAULT_GGUF_METHOD,
-    METHODS,
     METHODS_BY_ID,
     Family,
     comfy_format,
@@ -109,7 +108,21 @@ def open_in_editor(path: str) -> None:
 def _notify_no_launcher(app: "QuantApp") -> None:
     app.emit_toast("No editor available to open the log.", "warning")
 
-SELECT_OPTIONS = [(m.label, m.id) for m in METHODS]
+
+def _literal(text: str) -> str:
+    r"""Escape square brackets so Textual markup does not eat a literal badge.
+
+    Static renders Textual markup, and the parser accepts an UPPERCASE tag
+    (``[IMATRIX]`` reads as a style name) even though ``textual.markup.escape``
+    only escapes lowercase-leading tags -- so the badge silently vanished from
+    the UI and applied a bogus style to the rest of the line.
+
+    Only ``[`` is escaped: the parser consumes the backslash on ``\[`` and
+    leaves a lone ``]`` alone, so escaping ``]`` too would paint a stray
+    backslash into the rendered line.
+    """
+    return text.replace("[", r"\[")
+
 # T3b (plan 2026-08-31-gguf-unsloth-parity): re-export, NOT a redefinition.
 # The old duplicate ("q4_k_xl if present else METHODS[0]") degraded to
 # not_quantized after the UD-* removal; the single home is quant_methods.
@@ -684,19 +697,18 @@ class QuantApp(handlers.HandlersMixin, App):
 
     # ---- family tab shortcuts (S1.3) ------------------------------------------
     def action_family_gguf(self) -> None:
-        """Key ``1``: programmatically press the GGUF radio, which fires
-        RadioSet.Changed -> the existing on_radio_set_changed handler."""
-        try:
-            self.query_one("#fam_gguf", RadioButton).value = True
-        except NoMatches:
-            pass  # family radio not mounted
+        """Key ``1``: switch to the GGUF panel.
+
+        Goes through ``_set_family`` so ``self.family`` is updated
+        SYNCHRONOUSLY: pressing the radio alone only *posts* the change, and a
+        caller that switches family then acts in the same block (wizard /
+        profile apply -> Run) would otherwise validate the wrong panel.
+        """
+        self._set_family(Family.GGUF)
 
     def action_family_comfy(self) -> None:
         """Key ``2``: see action_family_gguf."""
-        try:
-            self.query_one("#fam_comfy", RadioButton).value = True
-        except NoMatches:
-            pass  # family radio not mounted
+        self._set_family(Family.COMFY)
 
     def emit_toast(self, msg: str, severity: str = "information") -> None:
         """Toast wrapper (plan Q5): route user feedback through App.notify."""
@@ -726,8 +738,9 @@ class QuantApp(handlers.HandlersMixin, App):
             "family": self.family.value,
             "model": self.query_one("#model", Input).value,
             "output": self.query_one("#output", Input).value,
-            "method": str(self.query_one("#method", Select).value),
+            "method": self.query_one("#method", Input).value,
             "custom": self.query_one("#custom", Input).value,
+            "imatrix": self.imatrix_value(),
             "maxseq": self.query_one("#maxseq", Input).value,
             "ctq_input": self.query_one("#ctq_input", Input).value,
             "ctq_output": self.query_one("#ctq_output", Input).value,
@@ -768,6 +781,9 @@ class QuantApp(handlers.HandlersMixin, App):
             "#model": fields.get("model", ""),
             "#output": fields.get("output", ""),
             "#custom": fields.get("custom", ""),
+            "#imatrix_path": (
+                "" if fields.get("imatrix") == "auto" else fields.get("imatrix", "")
+            ),
             "#maxseq": fields.get("maxseq", ""),
             "#ctq_input": fields.get("ctq_input", ""),
             "#ctq_output": fields.get("ctq_output", ""),
@@ -778,12 +794,19 @@ class QuantApp(handlers.HandlersMixin, App):
                 self.query_one(wid, Input).value = val or ""
             except NoMatches:
                 pass  # widget not mounted (family panel hidden)
+        # T9: #method is an Input now -- any string (including comma lists and
+        # ids from newer unsloth versions) applies cleanly; no option-value
+        # errors possible, so the old InvalidSelectValueError dance is gone.
         try:
             if fields.get("method"):
-                self.query_one("#method", Select).value = fields["method"]
-        except (NoMatches, InvalidSelectValueError):
-            # NoMatches: select not mounted; InvalidSelectValueError: stale
-            # profile/wizard value not among the select's current options.
+                self.query_one("#method", Input).value = fields["method"]
+        except NoMatches:
+            pass  # widget not mounted (family panel hidden)
+        try:
+            self.query_one("#imatrix_auto", Checkbox).value = (
+                fields.get("imatrix") == "auto"
+            )
+        except NoMatches:
             pass
         try:
             if fields.get("ctq_format"):
@@ -1023,9 +1046,17 @@ class QuantApp(handlers.HandlersMixin, App):
         m = METHODS_BY_ID.get(mid)
         if m:
             badge = "[IMATRIX] " if m.needs_imatrix else ""
-            self.query_one("#method_info", Static).update(f"{badge}{m.description}")
+            hint = " (needs an imatrix — set a path or 'auto')" if m.needs_imatrix else ""
+            # The badge is emphasised with real markup; the literal brackets it
+            # displays are escaped (see _literal) so they survive rendering.
+            head = f"[b yellow]{_literal(badge.strip())}[/b yellow] " if badge else ""
+            self.query_one("#method_info", Static).update(
+                head + _literal(m.description) + _literal(hint)
+            )
         else:
-            self.query_one("#method_info", Static).update("Custom method — passed through to Unsloth.")
+            self.query_one("#method_info", Static).update(
+                "Custom method — passed through to Unsloth."
+            )
 
     def refresh_ctq_visibility(self) -> None:
         """Show/hide ctq widgets based on the selected format (data-driven).

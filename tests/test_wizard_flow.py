@@ -26,7 +26,9 @@ async def test_wizard_review_matches_form_cmd():
         await pilot.pause()
         assert a.query_one("#model", Input).value == "/data/model.safetensors"
         assert a.query_one("#output", Input).value == "/data/out"
-        assert str(a.query_one("#method", Select).value) == "q4_k_m"
+        # T9: #method is an Input now (T8) -- the applier writes the free-text
+        # value verbatim, no Select option-value errors possible.
+        assert a.query_one("#method", Input).value == "q4_k_m"
 
 
 async def test_wizard_start_runs_same_pipeline(tmp_path, monkeypatch):
