@@ -52,6 +52,10 @@ IMATRIX_PATH = "#imatrix_path"
 IMATRIX_AUTO = "#imatrix_auto"
 UD_FOOTER = "#ud_footer"
 
+# Method picker (feature: pick-from-list modal) -- the button beside the
+# free-text #method Input that opens MethodPickerScreen with all 35 ids.
+PICK_METHOD = "#pick_method"
+
 
 def all_ids() -> tuple[str, ...]:
     """Every contract id that must exist in the composed app *right now*.
@@ -83,4 +87,5 @@ def all_ids() -> tuple[str, ...]:
         IMATRIX_PATH,
         IMATRIX_AUTO,
         UD_FOOTER,
+        PICK_METHOD,
     )
