@@ -9,9 +9,11 @@ You only need to provide three things:
    + tokenizer files) **or** a single `.safetensors` file sitting next to a
    `config.json`.
 2. **Output folder** — where the `.gguf` will be written (auto-suggested).
-3. **Quantization method** — free text (default `q4_k_m`); comma-separate to
-   quantize several sizes in one run (`q4_k_m, q5_k_m, q8_0`). IQ* methods
-   require an **imatrix** (a local `.dat`/`.gguf` path or *Auto*).
+3. **Quantization method** — pick from the list (default `q4_k_m`): press
+   **Pick from list** and check one or several of the 35 official methods;
+   comma-separating (`q4_k_m, q5_k_m, q8_0`) quantizes several sizes in one
+   run. IQ* methods require an **imatrix** (a local `.dat`/`.gguf` path or
+   *Auto*).
 
 The heavy Unsloth/CUDA work runs in a separate python process (configurable via
 the "Worker Python interpreter" field), so this TUI stays light and responsive
@@ -47,11 +49,13 @@ python -m quantui
 
 - `1` Model path — type it or press **Browse** (folder/file picker).
 - `2` Output folder — auto-filled as `<model>-<METHOD>`; edit or **Browse**.
-- `3` Quantization method — free text (default `q4_k_m`). Comma-separate for
-  multiple outputs in one run (`q4_k_m, q5_k_m`). Methods marked
-  **[IMATRIX]** (the `iq*` family) need an imatrix — set a local path or
-  check **Auto** in the Advanced section (fetches the upstream Unsloth
-  imatrix). The *Custom method* box overrides the field above.
+- `3` Quantization method — press **Pick from list** to check the methods
+  (multi-select supported; default `q4_k_m`). Comma-separate for
+  multiple outputs in one run (`q4_k_m, q5_k_m`) — or just check several in
+  the picker. Methods marked **[IMATRIX]** (the `iq*` family) need an
+  imatrix — set a local path or check **Auto** in the Advanced section
+  (fetches the upstream Unsloth imatrix). The *Custom method* box overrides
+  the field above.
 - Optional: max sequence length, load-in-4bit, push-to-hub repo + token.
 - **Run Quantization** (or press `r`). Watch the live log on the right.
 - `q` quits.
