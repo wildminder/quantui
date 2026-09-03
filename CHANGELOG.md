@@ -89,6 +89,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   diffusion-head projections/modulations).
 
 ### Added
+- **Method picker modal (pick from the 35 official ids).** The GGUF tab's
+  *Quantization method* field gained a **Pick from list** button (`#pick_method`)
+  that opens `MethodPickerScreen` — a `SelectionList` of all 35 official
+  unsloth methods (registry order, `list_line` labels with `[IMATRIX]` badges
+  and bits-per-weight), with the current method(s) preselected. Space toggles,
+  Confirm fills the field with a comma-joined id list in **registry order**
+  (deterministic regardless of click order) and refreshes the method-info line
+  plus the output auto-suggestion; Cancel/Escape leaves the field untouched.
+  The free-text `#method` Input stays editable (multi-method comma lists,
+  profile compatibility) — the picker removes the typo risk of typing ids by
+  hand; preselect semantics are additive (picking extends the current
+  selection). Covered by `tests/test_method_picker_headless.py` (10 tests)
+  plus lead-authored edge cases in `tests/test_method_picker_qa.py` (6 tests:
+  empty-field no-op, typo-preselect, iq\* round-trip, full id-set coverage,
+  and the hand-typed-typo validation gate regression).
 - **The ruff count gate survives zero findings (NTH-008).** `ruff` prints
   `All checks passed!` (not `Found N errors.`) when clean, so the
   count-extraction pipeline in `scripts/precommit_ruff.sh` matched nothing and
