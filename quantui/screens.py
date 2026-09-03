@@ -13,7 +13,7 @@ import string
 from pathlib import Path
 
 from textual import work
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -21,9 +21,26 @@ from textual.widgets import (
     DirectoryTree,
     Input,
     Label,
+    SelectionList,
 )
 
 from .model_audit import AuditError, _human_bytes, audit, suggest_exclusions
+from .quant_methods import METHODS, list_line
+
+
+def _literal(text: str) -> str:
+    r"""Escape ``[`` so Textual markup does not eat a literal badge.
+
+    Same trick as ``app._literal`` (kept local here: ``app`` imports this
+    module, so importing it back would be circular). ``list_line`` labels
+    carry an ``[IMATRIX]`` badge, and the markup parser reads an
+    UPPERCASE-leading tag as a style name -- ``textual.markup.escape``
+    does NOT escape those, so the badge would silently vanish from the
+    picker's option prompt. Only ``[`` is escaped: the parser consumes the
+    backslash on ``\[`` and leaves a lone ``]`` alone (escaping ``]`` too
+    would paint a stray backslash).
+    """
+    return text.replace("[", r"\[")
 
 
 class PathModal(ModalScreen):
@@ -342,6 +359,86 @@ class AuditScreen(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "audit_close":
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class MethodPickerScreen(ModalScreen):
+    """Pick GGUF quantization method(s) from the 35 official unsloth ids.
+
+    Opened by the ``#pick_method`` button next to the free-text ``#method``
+    Input. The Input stays editable (multi-method comma lists, profile
+    compatibility); this modal just removes the typo risk of typing ids
+    by hand. Follows the NameModal/ConfirmModal ``dismiss(result)`` contract:
+
+    * Confirm -> ``dismiss("q4_k_m, q5_k_m")`` -- comma-joined selected ids
+      in ``METHODS`` **registry order** (deterministic output, NOT click
+      order; downstream ``parse_methods`` / ``validate_gguf`` split it back).
+    * Cancel / Escape -> ``dismiss(None)`` -- the caller leaves ``#method``
+      untouched.
+
+    The list pre-selects every id currently present in ``initial`` (a
+    comma list like ``"q4_k_m, q5_k_m"``); unknown ids (free-text typos)
+    are silently ignored -- ``SelectionList.select`` with an unknown value
+    is a silent no-op-plus-phantom-entry in Textual 8.2.8, so the known
+    ids must be filtered first.
+    """
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, initial: str = "") -> None:
+        super().__init__()
+        self.values: dict = {"initial": initial or ""}
+        # Known registry ids only: pre-select via initial_state= in the
+        # constructor tuples (selected before mount, no toggle messages).
+        known = {m.id for m in METHODS}
+        wanted = {
+            tok.strip()
+            for tok in (initial or "").split(",")
+            if tok.strip() and tok.strip() in known
+        }
+        self._initial_selection: set[str] = wanted
+
+    def compose(self) -> "object":
+        options: list[tuple[str, str, bool]] = [
+            (
+                _literal(list_line(m)),
+                m.id,
+                m.id in self._initial_selection,
+            )
+            for m in METHODS
+        ]
+        yield Vertical(
+            Label("Pick quantization method(s) — space toggles, Enter confirms"),
+            VerticalScroll(
+                SelectionList(*options, id="mp_list"),
+            ),
+            Horizontal(
+                Button("Cancel", id="mp_cancel"),
+                Button("Confirm", id="mp_confirm", variant="success"),
+                classes="buttons",
+            ),
+            classes="modal",
+        )
+
+    def _confirm(self) -> None:
+        """Dismiss with the comma-joined selected ids in registry order.
+
+        ``SelectionList.selected`` is insertion/click order; iterate the
+        registry instead so the output string is stable regardless of how
+        the user ticked the boxes.
+        """
+        sl = self.query_one("#mp_list", SelectionList)
+        chosen = set(sl.selected)
+        ordered = [m.id for m in METHODS if m.id in chosen]
+        self.dismiss(", ".join(ordered))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "mp_confirm":
+            self._confirm()
+        else:
             self.dismiss(None)
 
     def action_cancel(self) -> None:

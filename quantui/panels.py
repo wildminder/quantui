@@ -372,8 +372,16 @@ def build_gguf_panel() -> VerticalScroll:
         # dropdown cannot express multi-method runs ("q4_k_m, q5_k_m"); free
         # text + validate_gguf's whitelist (T5) catches typos the Select used
         # to prevent. Same #method id: _read_config / profiles keep working.
-        Input(id="method", value=DEFAULT_METHOD,
-              placeholder="e.g. q4_k_m — comma-separate for multiple"),
+        # The #pick_method button (method-picker feature) opens a modal list
+        # of all 35 official ids so nobody types them by hand -- the Input
+        # stays editable for comma lists (same classes="field" pattern as the
+        # #model + #browse_model row above).
+        Horizontal(
+            Input(id="method", value=DEFAULT_METHOD,
+                  placeholder="e.g. q4_k_m — comma-separate for multiple"),
+            Button("Pick from list", id="pick_method"),
+            classes="field",
+        ),
         Static(id="method_info"),
         Static(UD_INFO_FOOTER, id="ud_footer"),
         Collapsible(

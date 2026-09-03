@@ -336,6 +336,16 @@ class HandlersMixin:
             self.push_screen(screens.PathModal(self.query_one("#ctq_output", Input).value), self.set_ctq_out)
         elif b == "browse_validate_in":
             self.push_screen(screens.PathModal(self.query_one("#validate_path", Input).value, file_mode=True), self.set_validate_path)
+        elif b == "pick_method":
+            # Method-picker feature: open the 35-method list modal with the
+            # current #method value preselected (a comma list preselects every
+            # entry it names). The Input itself stays untouched until the user
+            # Confirms -- Cancel/Escape dismiss None (no change).
+            current = self.query_one("#method", Input).value
+            self.push_screen(
+                screens.MethodPickerScreen(initial=current),
+                self._on_method_picked,
+            )
         elif b == "validate":
             self.action_validate_comfy()
         elif b in ("run", "run_ctq"):
@@ -508,6 +518,19 @@ class HandlersMixin:
     def set_validate_path(self, result: str) -> None:
         if result:
             self.query_one("#validate_path", Input).value = result
+
+    def _on_method_picked(self, value) -> None:
+        """MethodPickerScreen callback: apply the picked ids to #method.
+
+        ``value`` is the comma-joined id string (registry order) on Confirm,
+        or ``None`` on Cancel/Escape. An empty string (nothing selected +
+        Confirm) also leaves the field alone -- clearing the method would
+        break the run gate's default-method expectations.
+        """
+        if isinstance(value, str) and value:
+            self.query_one("#method", Input).value = value
+            self.update_method_info()
+            self.auto_suggest_output(Family.GGUF)
 
     def set_ctq_out(self, result: str) -> None:
         if result:
