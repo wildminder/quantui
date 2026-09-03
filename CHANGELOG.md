@@ -104,6 +104,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   plus lead-authored edge cases in `tests/test_method_picker_qa.py` (6 tests:
   empty-field no-op, typo-preselect, iq\* round-trip, full id-set coverage,
   and the hand-typed-typo validation gate regression).
+- **On-demand torch-suite gate (NTH-009).** New `scripts/gate_torch.sh` runs
+  the two torch-dependent suites (`test_stream_quant.py` +
+  `test_incremental_safetensors.py` — the streaming quantization and resumable
+  writer integration coverage) in the CTQ venv
+  (`.venv-torch`; `GATE_PYTHON` overrides). The script
+  probes the interpreter and torch BEFORE pytest so failures name the actual
+  problem; `--check` is a fast validate-only mode. Real run: 20 passed.
+  Environment drift noted: the headless venv now carries torch-cpu, so both
+  suites also run there with graceful `convert_to_quant` skips
+  (14 passed / 6 skipped).
+- **Opt-in packaging smoke (NTH-010).** `PACKAGING=1 bash scripts/gate_tests.sh`
+  adds a packaging stage after pytest: a throwaway venv + `pip install -e .
+  --no-deps` + console-entry-point resolution check via
+  `scripts/packaging_smoke.py` (existence-based on both Windows `Scripts/`
+  and POSIX `bin/` layouts; never launches the Textual app). Default OFF —
+  the commit-time gate stays fast. Python manages the smoke's temp dir
+  (bash `mktemp`/`rm -rf` mangle Windows paths and leaked the venv).
 - **The ruff count gate survives zero findings (NTH-008).** `ruff` prints
   `All checks passed!` (not `Found N errors.`) when clean, so the
   count-extraction pipeline in `scripts/precommit_ruff.sh` matched nothing and
