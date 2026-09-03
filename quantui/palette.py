@@ -13,6 +13,9 @@ the app, so dispatch goes through ``self.app``.
 
 from textual.command import DiscoveryHit, Hit, Provider
 from textual.css.query import NoMatches
+from textual.widgets import Input
+
+from .screens import MethodPickerScreen
 
 
 class QuantCommands(Provider):
@@ -31,13 +34,20 @@ class QuantCommands(Provider):
         ("Audit model file", "action_audit_model", "Classify tensors + suggest exclusions"),
         ("GGUF family", "action_family_gguf", "Switch to the GGUF family (1)"),
         ("ComfyUI family", "action_family_comfy", "Switch to ComfyUI family (2)"),
+        # Method picker feature (2026-09-03): opens the 35-method list modal
+        # from the palette too -- not just the #pick_method button.
+        ("Pick quantization method", "_palette_pick_method",
+         "Choose method(s) from the 35 official ids"),
     ]
 
     _JUMPS = [
         ("Focus model path", "#model"),
         ("Focus output path", "#output"),
         ("Focus ctq input", "#ctq_input"),
-        ("Focus method select", "#method"),
+        # Method picker feature (2026-09-03): #method is a free-text Input
+        # (was a Select); use "Pick quantization method" above to open the
+        # 35-method modal instead of jumping into the field.
+        ("Focus method field", "#method"),
     ]
 
     async def discover(self):
@@ -64,6 +74,8 @@ class QuantCommands(Provider):
     def _run(self, action: str) -> None:
         if action == "_palette_run":
             self._palette_run()
+        elif action == "_palette_pick_method":
+            self._palette_pick_method()
         else:
             # Handlers live on the app; self.screen is only the calling
             # screen (a plain Screen in Textual 8.2.8), not the app.
@@ -76,6 +88,19 @@ class QuantCommands(Provider):
             app.action_stop_run()
         else:
             app.action_run()
+
+    def _palette_pick_method(self) -> None:
+        # Open MethodPickerScreen from the palette. Same push as the
+        # #pick_method button branch in HandlersMixin.on_button_pressed;
+        # goes through the app so there is one callback path.
+        app = self.app
+        try:
+            current = app.query_one("#method", Input).value
+        except NoMatches:
+            return  # GGUF panel not mounted (comfy family active)
+        app.push_screen(
+            MethodPickerScreen(initial=current), app._on_method_picked
+        )
 
     def _focus(self, selector: str) -> None:
         try:

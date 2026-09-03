@@ -80,8 +80,31 @@ async def test_palette_dispatch_audit_command():
 def test_all_palette_actions_exist_on_app():
     """Tripwire: every palette action name resolves to a QuantApp handler."""
     for title, action, _help in QuantCommands._ACTIONS:
-        if action == "_palette_run":
-            continue
+        if action.startswith("_palette_"):
+            continue  # provider-internal morphing entry points (run/pick)
         assert callable(getattr(appmod.QuantApp, action, None)), (
             f"palette entry {title!r} -> QuantApp.{action} is missing"
         )
+
+
+async def test_palette_pick_method_opens_picker():
+    """'Pick quantization method' palette action opens MethodPickerScreen with
+    the current #method value preselected (same modal as the #pick_method
+    button)."""
+    from textual.widgets import Input
+
+    from quantui.screens import MethodPickerScreen
+
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a.query_one("#method", Input).value = "q5_k_m"
+        provider = QuantCommands(a.screen)
+        provider._run("_palette_pick_method")
+        # Modal mounts async: pause until the picker is the active screen.
+        for _ in range(20):
+            await pilot.pause()
+            if isinstance(a.screen, MethodPickerScreen):
+                break
+        assert isinstance(a.screen, MethodPickerScreen), type(a.screen)
+        sl = a.screen.query_one("#mp_list")
+        assert "q5_k_m" in sl.selected
