@@ -27,6 +27,7 @@ BASELINE: dict[str, int] = {
     "capabilities.py": 0,   # narrowed to json.JSONDecodeError (STEP 2.5)
     "comfy_quant_schema.py": 0,
     "dtype_cast.py": 0,     # pure bit-math module (STEP 2.1): no except blocks by design
+    "form_state.py": 0,     # IMP-006 extraction (2026-09-04): verbatim move from app.py
     "handlers.py": 0,
     "ids.py": 0,
     "incremental_safetensors.py": 0,
@@ -44,6 +45,7 @@ BASELINE: dict[str, int] = {
     "quant_methods.py": 0,    # boundary-marked eval guard (STEP 2.5)
     "quant_validator.py": 0,
     "run_config.py": 0,
+    "run_finalization.py": 0,  # IMP-006 extraction (2026-09-04): verbatim move from app.py
     "run_monitor.py": 0,
     "screens.py": 0,
     "screens_wizard.py": 0,   # narrowed to NoMatches (STEP 2.5)
