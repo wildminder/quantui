@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Changed
+- **IMP-006: app.py composition root extraction (1306 → 1022 lines).** Two
+  coherent clusters moved verbatim into duck-typed mixins so every
+  `QuantApp.method` path and test monkeypatch target is unchanged:
+  `quantui/form_state.py` (profile snapshot/apply, method-info line, data-
+  driven ctq visibility, presets) and `quantui/run_finalization.py` (shared
+  run finalizer with the output-ownership read, duration capture, bell).
 - **GGUF registry aligned to the official Unsloth quant surface (35 ids).**
   The method list now mirrors `unsloth_zoo`'s `save_pretrained_gguf` exactly:
   the 24 `ALLOWED_QUANTS` ids plus the 11 `IMATRIX_QUANTS` ids, in the official
