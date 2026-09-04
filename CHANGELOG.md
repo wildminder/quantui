@@ -39,6 +39,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   read.
 
 ### Added
+- **Conformance validation vs unsloth references (LFM2.5-VL-3B).** Ran the
+  worker end-to-end on the user's original BF16 with q8_0, q4_0, iq2_m and
+  iq4_xs (the IQ* runs with an imatrix) and compared against unsloth's own
+  published GGUFs with `scripts/check_gguf_conformance.py`: Q8_0 and the
+  BF16 mmproj are **bit-identical** (266/266 and 441/441 tensors); IQ4_XS /
+  Q4_0 are statistically identical (median per-tensor error ratio vs the
+  reference 1.001–1.04, same quant-type mix; deltas trace to different
+  imatrix calibration data and unsloth's dynamic tensor upgrades, not to
+  spec violations). Report: `docs/reports/2026-09-04-gguf-conformance-lfm25-vl.md`
+  (local-only). Fixes surfaced by the run: the architecture gate rejected
+  VLM architectures (`Lfm2VlForConditionalGeneration`) that unsloth actually
+  converts — it is a blocklist of TTS/Seq2Seq/audio types now; the export
+  progress thread swallowed worker exceptions and reported DONE with no file
+  written — exceptions now propagate; the disk-space headroom factor is
+  env-tunable (`UQT_DISK_HEADROOM`, default 2.5).
 - **End-to-end imatrix support for IQ* quantizations.** The GGUF panel's
   Advanced section gains an *Imatrix* path field plus an **Auto** checkbox
   (fetch the upstream Unsloth imatrix); `--imatrix` is emitted to the worker

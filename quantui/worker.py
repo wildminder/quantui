@@ -107,37 +107,57 @@ def _run_with_output_progress(fn, output_dir: str, expected_bytes: int, label: s
     their combined size against the expected f16 model size gives a genuine overall
         progress signal. Falls back to a bare call on any instrumentation error so
     progress can never block the actual export.
+
+    Exceptions from the export thread are RE-RAISED on the calling thread: the
+    export failed, so reporting DONE/100% would be a lie (the TUI showed
+    success while no file was written -- found by the LFM2.5-VL imatrix run).
     """
+    import threading
+
+    outcome: dict = {}
+
+    def _target():
+        try:
+            fn()
+        except BaseException as exc:  # noqa: BLE001 - propagate ANY thread failure
+            outcome["exc"] = exc
+
+    def _emit_progress():
+        sz = _gguf_bytes()
+        if sz > 0:
+            pct = min(99.0, 100.0 * sz / expected)
+            if abs(pct - last[0]) >= 1.0 or last[0] < 0:
+                progress("quantize", pct=pct, label=label)
+                last[0] = pct
+
+    def _gguf_bytes() -> int:
+        try:
+            return sum(
+                os.path.getsize(os.path.join(output_dir, f))
+                for f in os.listdir(output_dir)
+                if f.endswith(".gguf")
+            )
+        except OSError:
+            return 0
+
+    expected = max(1, int(expected_bytes * 0.6))  # Q-quant is well under f16 size
+    last = [-1.0]
     try:
-        import threading
-
-        def _gguf_bytes() -> int:
-            try:
-                return sum(
-                    os.path.getsize(os.path.join(output_dir, f))
-                    for f in os.listdir(output_dir)
-                    if f.endswith(".gguf")
-                )
-            except OSError:
-                return 0
-
-        expected = max(1, int(expected_bytes * 0.6))  # Q-quant is well under f16 size
-        thread = threading.Thread(target=fn, daemon=True)
+        thread = threading.Thread(target=_target, daemon=True)
         thread.start()
-        last = -1.0
         while thread.is_alive():
-            sz = _gguf_bytes()
-            if sz > 0:
-                pct = min(99.0, 100.0 * sz / expected)
-                if abs(pct - last) >= 1.0 or last < 0:
-                    progress("quantize", pct=pct, label=label)
-                    last = pct
+            _emit_progress()
             thread.join(timeout=1.0)
         thread.join()
-        progress("quantize", pct=100.0, label="GGUF written")
-    except Exception:  # noqa: BLE001
+    except Exception:
+        # Instrumentation failed (never the export itself, which runs in the
+        # thread); fall back to a bare synchronous call so the run proceeds.
+        if "exc" not in outcome and not thread.is_alive():
+            raise
         fn()
-        progress("quantize", pct=100.0, label="GGUF written")
+    if "exc" in outcome:
+        raise outcome["exc"]
+    progress("quantize", pct=100.0, label="GGUF written")
 
 
 def fail(msg: str) -> None:
@@ -203,25 +223,36 @@ def check_supported_architecture(model_dir: str) -> None:
             "Models like VibeVoice need a recent transformers (the VibeVoice class was "
             "merged into transformers ~Sept 2025, PR #40546). Try upgrading:\n"
             "    pip install -U transformers\n"
-            "Note: even after upgrading, Unsloth GGUF export only supports causal "
-            "language-model architectures that llama.cpp can run, so TTS / Seq2Seq / "
-            "multimodal models still won't convert to GGUF."
+            "Note: even after upgrading, Unsloth GGUF export only supports models "
+            "whose weights llama.cpp can represent, so TTS / Seq2Seq models still "
+            "won't convert to GGUF."
         )
         return
     archs = list(getattr(cfg, "architectures", []) or [])
     model_type = getattr(cfg, "model_type", None)
-    is_causal = any(str(a).endswith("ForCausalLM") for a in archs)
-    if not is_causal:
+    # Unsloth 2026.9+ converts BOTH plain causal LMs and VLMs whose text tower
+    # llama.cpp supports -- Lfm2VlForConditionalGeneration (LFM2.5-VL) exports
+    # a language GGUF + an mmproj GGUF, and Qwen3-VL / Gemma3 style
+    # ForConditionalGeneration archs are handled the same way. Blocking every
+    # non-"ForCausalLM" arch locked users out of supported models (found by the
+    # LFM2.5-VL-3B conformance run: unsloth+converter accept it, we refused it).
+    # Blocklist instead: TTS / seq2seq / diffusion families that genuinely fail.
+    blocked_model_types = {
+        "vibevoice", "musicgen", "bark", "speecht5", "whisper",
+        "t5", "m2m_100", "marian", "seamless_m4t", "studio_omni",
+    }
+    blocked = str(model_type or "").lower() in blocked_model_types
+    if blocked:
         name = ", ".join(archs) if archs else (str(model_type) if model_type else "unknown")
         fail(
             f"Unsupported architecture: {name}.\n"
-            "Unsloth GGUF quantization only supports causal-language-model "
-            "architectures that llama.cpp can run (e.g. Llama, Qwen2, Mistral, Gemma).\n"
-            "This model is not a causal LM (it appears to be a TTS / Seq2Seq / multimodal "
-            "model with VAE or diffusion components), so it cannot be converted to GGUF.\n"
-            "Options: (1) use a causal-LM model, or (2) for this specific model, run it in "
-            "PyTorch with bf16/fp16 or weight-only int4/int8 (torchao / quanto / bitsandbytes) "
-            "instead of GGUF."
+            "Unsloth GGUF quantization only supports models whose weights llama.cpp "
+            "can represent (causal LMs and VLMs with a causal-LM text tower).\n"
+            "This model type is TTS / Seq2Seq / generative-audio, which cannot be "
+            "converted to GGUF.\n"
+            "Options: (1) use a causal-LM or supported VLM model, or (2) run it in "
+            "PyTorch with bf16/fp16 or weight-only int4/int8 (torchao / quanto / "
+            "bitsandbytes) instead of GGUF."
         )
 
 
@@ -297,7 +328,15 @@ def main() -> None:
     model_bytes = estimate_disk(model_dir)
     free = shutil.disk_usage(args.output).free
     # Need ~2.5x: f16 intermediate + quantized output + headroom.
-    needed = int(model_bytes * 2.5)
+    # UQT_DISK_HEADROOM lets a power user lower the factor on a tight disk
+    # (default 2.5; e.g. 1.6 is enough when the BF16 intermediate is the only
+    # large byproduct). Values below 1.05 are ignored (would never fit even a
+    # bare copy of the output).
+    try:
+        headroom = float(os.environ.get("UQT_DISK_HEADROOM", "2.5"))
+    except ValueError:
+        headroom = 2.5
+    needed = int(model_bytes * max(headroom, 1.05))
     if free < needed:
         fail(
             f"Not enough free disk space in {args.output}. Need ~{needed/1e9:.1f} GB, "

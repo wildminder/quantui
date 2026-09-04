@@ -103,3 +103,34 @@ def test_list_methods_marks_imatrix():
     for ln in lines:
         if ln.startswith("q8_0"):
             assert "[IMATRIX]" not in ln
+
+
+# --------------------------------------------------------------------------- #
+# _run_with_output_progress: export-thread failure MUST propagate (regression)
+# --------------------------------------------------------------------------- #
+def test_progress_wrapper_propagates_export_failure(capsys):
+    # Found by the LFM2.5-VL imatrix run: unsloth raised inside the export
+    # thread, but the wrapper printed DONE + 100% and exited 0 -- the TUI
+    # showed success while no file existed. The exception must re-raise on
+    # the calling thread and the 100%/DONE line must NOT print.
+    import contextlib
+    import io
+
+    def boom():
+        raise RuntimeError("Unsloth: imatrix_file=True but no upstream imatrix was found.")
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        with pytest.raises(RuntimeError, match="no upstream imatrix"):
+            wk._run_with_output_progress(boom, "tmp/uqt-progress-test-empty", 1000, "Exporting GGUF")
+    assert '"pct": 100.0' not in buf.getvalue()
+
+
+def test_progress_wrapper_prints_100_on_success(capsys):
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        wk._run_with_output_progress(lambda: None, "tmp/uqt-progress-test-empty", 1000, "Exporting GGUF")
+    assert '"pct": 100.0' in buf.getvalue()
