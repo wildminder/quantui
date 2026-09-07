@@ -75,6 +75,15 @@ def test_plan_exotic_dtype():
     assert "exotic" in item.reason
 
 
+def test_plan_token_embd_stays_f16():
+    """llama.cpp convention: token_embd.weight is never method-quantized."""
+    item = plan_tensor("model.language_model.embed_tokens.weight", "BF16",
+                       (151936, 1536), "native_q8_0")
+    assert item.action == "pass_f16"
+    assert item.gguf_name == "token_embd.weight"
+    assert "F16" in item.reason
+
+
 def test_plan_unknown_method_raises():
     with pytest.raises(ValueError, match="native_q6_k"):
         plan_tensor("x.weight", "F32", (64, 64), "native_q6_k")
