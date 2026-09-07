@@ -134,3 +134,77 @@ def dequantize_q4_0(raw: bytes, numel: int) -> np.ndarray:
     d = blocks[:, 0:2].copy().view("<f2").astype(np.float32).ravel()
     q = np.stack([_unpack_q4_nibbles(blocks[i, 2:18]) for i in range(n_blocks)])
     return (q.astype(np.float32) * d[:, None]).reshape(-1)
+
+
+# --------------------------------------------------------------------------- #
+# S2.3 — tensor plan: the deterministic per-tensor policy
+# --------------------------------------------------------------------------- #
+from dataclasses import dataclass  # noqa: E402  (grouped with the plan section)
+
+# safetensors dtypes the plan understands (subset of DTYPE_ITEMSIZE)
+_FLOAT_DTYPES = frozenset({"F32", "F16", "BF16"})
+_INT_DTYPES = frozenset({"I32", "U8", "BOOL"})
+
+NATIVE_METHODS: tuple[str, ...] = ("native_q8_0", "native_q4_0", "native_f16", "native_f32")
+
+
+@dataclass(frozen=True)
+class TensorPlanItem:
+    """One tensor's deterministic conversion decision."""
+
+    hf_name: str
+    gguf_name: str | None
+    hf_shape: tuple[int, ...]
+    action: str  # quant_q8_0 | quant_q4_0 | pass_f16 | pass_f32 | verbatim | skip
+    reason: str
+
+
+def plan_tensor(name: str, dtype: str, shape: tuple[int, ...], method: str) -> TensorPlanItem:
+    """Decide one tensor's action — first match wins, never guesses.
+
+    Policy (plan §S2.3): rotary skip -> exotic dtype -> 1-D verbatim ->
+    2-D float quant (ne0 divisible) -> 2-D float F16 demotion -> pass-quant
+    for f16/f32 methods -> integer verbatim. Unmapped GGUF names do NOT
+    change the action (VibeVoice audio 2-D linears quantize).
+    """
+    from quantui.gguf_names import hf_to_gguf_name, is_skippable
+
+    if method not in NATIVE_METHODS:
+        raise ValueError(f"plan_tensor: unknown native method {method!r} (v1 surface: {NATIVE_METHODS})")
+
+    if is_skippable(name):
+        return TensorPlanItem(name, None, tuple(shape), "skip", "rotary/cache tensor (not a weight)")
+
+    gguf_name = hf_to_gguf_name(name)
+
+    if dtype not in _FLOAT_DTYPES | _INT_DTYPES:
+        return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f32", f"exotic dtype {dtype} -> F32")
+
+    ndim = len(shape)
+    if ndim == 1:
+        return TensorPlanItem(name, gguf_name, tuple(shape), "verbatim", "1-D vector -> F32 (shared convention)")
+
+    if ndim >= 2 and dtype in _FLOAT_DTYPES:
+        ne0 = shape[-1]
+        if method == "native_q8_0":
+            if ne0 % 32 == 0:
+                return TensorPlanItem(name, gguf_name, tuple(shape), "quant_q8_0", f"q8_0 (ne0={ne0})")
+            return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f16", f"demoted: ne0={ne0} not divisible by 32")
+        if method == "native_q4_0":
+            if ne0 % 32 == 0:
+                return TensorPlanItem(name, gguf_name, tuple(shape), "quant_q4_0", f"q4_0 (ne0={ne0})")
+            return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f16", f"demoted: ne0={ne0} not divisible by 32")
+        if method == "native_f16":
+            return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f16", "f16 method")
+        return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f32", "f32 method")
+
+    # ndim >= 2 integers (or odd-shape ints): keep bytes verbatim
+    return TensorPlanItem(name, gguf_name, tuple(shape), "verbatim", f"{dtype} tensor kept verbatim")
+
+
+def demote_summary(items: list[TensorPlanItem]) -> dict[str, int]:
+    """Action -> count histogram over a plan (deterministic key order via sorted)."""
+    out: dict[str, int] = {}
+    for item in items:
+        out[item.action] = out.get(item.action, 0) + 1
+    return dict(sorted(out.items()))

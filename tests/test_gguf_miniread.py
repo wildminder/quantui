@@ -23,20 +23,20 @@ def _s(text: str) -> bytes:
 
 
 def _kv_str(key: str, value: str) -> bytes:
-    return _s(key) + struct.pack("<I", 10) + _s(value)
+    return _s(key) + struct.pack("<I", 8) + _s(value)  # STRING = 8
 
 
 def _kv_u32(key: str, value: int) -> bytes:
-    return _s(key) + struct.pack("<I", 6) + struct.pack("<I", value)
+    return _s(key) + struct.pack("<I", 4) + struct.pack("<I", value)  # UINT32 = 4
 
 
 def _kv_f32(key: str, value: float) -> bytes:
-    return _s(key) + struct.pack("<I", 8) + struct.pack("<f", value)
+    return _s(key) + struct.pack("<I", 6) + struct.pack("<f", value)  # FLOAT32 = 6
 
 
 def _kv_arr_str(key: str, values: list[str]) -> bytes:
-    out = _s(key) + struct.pack("<I", 11) + struct.pack("<I", 10) + struct.pack("<Q", len(values))
-    return out + b"".join(_s(v) for v in values)
+    out = _s(key) + struct.pack("<I", 9) + struct.pack("<I", 8) + struct.pack("<Q", len(values))
+    return out + b"".join(_s(v) for v in values)  # ARRAY = 9 of STRING = 8
 
 
 def _tensor_info(name: str, ne: list[int], ggml_type: int, offset: int) -> bytes:
@@ -100,7 +100,7 @@ def test_miniread_kv_types(tmp_path):
             _kv_str("general.name", "mini"),
             _kv_u32("x.block_count", 7),
             _kv_f32("x.eps", 1.5),
-            _s("x.flag") + struct.pack("<I", 9) + struct.pack("<B", 1),
+            _s("x.flag") + struct.pack("<I", 7) + struct.pack("<B", 1),  # BOOL = 7
             _kv_arr_str("x.roles", ["a", "b"]),
         ],
         [],
