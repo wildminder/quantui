@@ -80,7 +80,11 @@ def main() -> None:
             sys.exit(f"ERROR: missing {p}")
 
     # Dirty-tree guard: only the two managed files may differ from HEAD.
+    # Untracked cache/build dirs (unsloth_compiled_cache/, *.egg-info/) are
+    # handled via .gitignore; the guard below additionally ignores the known
+    # generated cache dir so a stale checkout can't block the release flow.
     _managed = ("quantui/__init__.py", "CHANGELOG.md")
+    _generated = ("unsloth_compiled_cache/",)
     try:
         proc = subprocess.run(
             ["git", "status", "--porcelain"], cwd=root,
@@ -88,6 +92,10 @@ def main() -> None:
         )
     except FileNotFoundError:
         proc = None
+    if proc is not None and proc.returncode == 0:
+        dirty = [ln for ln in proc.stdout.strip().splitlines()
+                 if ln and not ln.endswith(_managed)
+                 and not ln.endswith(_generated)]
     if proc is not None and proc.returncode == 0:
         dirty = [ln for ln in proc.stdout.strip().splitlines()
                  if ln and not ln.endswith(_managed)]
