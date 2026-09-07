@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **Native GGUF backend groundwork (plan 2026-09-07, STEP 0.1).** Pinned
+  golden Q8_0/Q4_0 block bytes generated from the gguf-py oracle
+  (`tests/golden/gguf_qgolden.py`): verbatim case-B hex (204/108 B with the
+  mid-stream zero block) + SHA-256 digest pins for the 64/6/131072-block
+  deterministic cases. Block layout confirmed scale-first
+  (`block_q8_0 { f16 d; int8 qs[32]; }`); Q4_0 zero block stores `d = -0.0`
+  (sign bit set) — both pinned by tests (`tests/test_gguf_qgolden.py`).
+
+### Changed
+- **Model-audit trio (NTH-012 / NTH-011 / NTH-007, commit 71120f0).**
+  `quant_validator` now flags orphan `.input_scale` entries with no matching
+  `.comfy_quant` sibling (NTH-012). The audit report gains a per-module `q%`
+  column — quantized matrix params vs the module's linear + linear_review
+  params (NTH-011) — and `ExclusionSuggestion.hints`: repeated (≥ 8×, same
+  shape) unknown 2D-weight last-segments surfaced as whitelist *candidates*
+  in both text and JSON renderers (NTH-007; the frozen `LINEAR_SEGMENTS`
+  table stays authoritative, hints only suggest, never auto-apply).
+
 ### Changed
 - **IMP-006: app.py composition root extraction (1306 → 1022 lines).** Two
   coherent clusters moved verbatim into duck-typed mixins so every
