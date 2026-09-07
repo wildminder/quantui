@@ -99,6 +99,35 @@ press **List all methods** in the TUI for the full annotated list.
 > instantly instead of after the model loads. A genuinely new id from a newer
 > Unsloth can be typed into *Custom method* and is passed straight through.
 
+## Native GGUF backend (no transformers)
+
+The GGUF panel also ships a **native exporter** (`Backend.NATIVE`, plan
+2026-09-07): a numpy-only pipeline that converts any HF safetensors
+checkpoint — single file, sharded folder, or plain `model.safetensors` — to
+spec-conformant GGUF **without transformers, unsloth, or torch**. Because it
+uses generic tensor-name mapping instead of per-architecture registration, it
+handles models the unsloth backend must reject (TTS models like
+**VibeVoice-1.5B**, or any unknown architecture).
+
+Four methods: `native_q8_0`, `native_q4_0`, `native_f16`, `native_f32`.
+
+Behavior (all deterministic, llama.cpp-convention):
+
+* `token_embd.weight` stays F16; 1-D tensors and integer tensors are kept;
+  2-D float weights are quantized by the chosen method.
+* Rows whose width isn't a multiple of 32 (conv kernels) are **demoted to
+  F16** with a loud per-tensor warning — the output is always
+  spec-conformant.
+* Unmapped tensor names pass through unchanged (audio heads, connectors).
+* bf16 sources are bit-shifted to f32 losslessly before quantizing.
+
+CLI: `python -m quantui.gguf_export -i <model> -m native_q8_0 [--json]`.
+In the TUI, pick a `native_*` id in the method field and Run.
+
+Kernels are byte-exact against gguf-py/llama.cpp reference block encoders
+(pinned goldens in `tests/golden/`), and the full pipeline is parity-tested
+against an independent Rust implementation's output on VibeVoice-1.5B.
+
 ## ComfyUI quantization formats (what to choose)
 
 The ComfyUI tab's **Format** dropdown controls how weights are quantized:
