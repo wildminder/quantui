@@ -24,15 +24,17 @@ from dataclasses import dataclass, field
 GGUF_MAGIC = b"GGUF"
 GGUF_VERSION = 3
 
-# gguf metadata value type ids (subset we emit/parse)
-_T_U64 = 4
-_T_I64 = 5
-_T_U32 = 6  # unused directly but documented
-_T_I32 = 7  # unused directly but documented
-_T_F32 = 8
-_T_BOOL = 9
-_T_STRING = 10
-_T_ARRAY = 11
+# gguf metadata value type ids — **gguf-py's actual on-disk ids**
+# (verified 2026-09-07: STRING=8, UINT32=4, FLOAT32=6, UINT64=10, BOOL=7,
+# ARRAY=9). NOTE these differ from the older draft-GGUF numbering.
+_T_U64 = 10
+_T_I64 = 11
+_T_U32 = 4
+_T_I32 = 5
+_T_F32 = 6
+_T_BOOL = 7
+_T_STRING = 8
+_T_ARRAY = 9
 
 _SCALAR_FMT: dict[int, struct.Struct] = {
     _T_U64: struct.Struct("<Q"),
