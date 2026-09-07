@@ -30,6 +30,7 @@ from . import profiles_store  # noqa: F401  (public re-export surface kept)
 from .quant_methods import (
     COMFY_FORMATS,
     METHODS_BY_ID,
+    Backend,
     Family,
     comfy_format,
     comfy_preset,
@@ -153,6 +154,10 @@ class FormStateMixin:
         if m:
             badge = "[IMATRIX] " if m.needs_imatrix else ""
             hint = " (needs an imatrix — set a path or 'auto')" if m.needs_imatrix else ""
+            if m.backend == Backend.NATIVE:
+                # S4.4: native ids get their own guidance (no imatrix hint).
+                badge = "[NATIVE] "
+                hint = " (native backend — no transformers/unsloth; converts any architecture)"
             # The badge is emphasised with real markup; the literal brackets it
             # displays are escaped (see _literal) so they survive rendering.
             head = f"[b yellow]{_literal(badge.strip())}[/b yellow] " if badge else ""

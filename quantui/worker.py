@@ -268,6 +268,54 @@ def estimate_disk(model_dir: str) -> int:
     return total
 
 
+def _run_native_backend(args) -> None:
+    """S4.2: native GGUF export — NO transformers / unsloth / torch.
+
+    Runs BEFORE any heavy import and BEFORE check_supported_architecture:
+    the arch blocklist describes the *unsloth* backend's limits; the native
+    exporter converts any HF checkpoint (TTS / unknown archs included) via
+    generic name mapping (plan 2026-09-07).
+    """
+    from .gguf_export import GgufExportError, export_gguf
+    from .gguf_qkernels import NATIVE_METHODS
+    from .run_config import parse_methods
+
+    methods = parse_methods(args.method)
+    if len(methods) != 1:
+        fail("Native backend supports exactly ONE method per run (comma lists are an unsloth-backend feature).")
+    method = methods[0]
+    if method not in NATIVE_METHODS:
+        fail(
+            f"'{method}' is not a native method. Native surface: {', '.join(NATIVE_METHODS)}. "
+            "Official unsloth ids (q4_k_m, iq2_xs, ...) require --backend unsloth."
+        )
+    if args.imatrix:
+        fail("The native GGUF backend does not support imatrix quants (v1). Use an unsloth IQ* id instead.")
+
+    model_path = resolve_model_dir(args.model)
+    out_dir = os.path.abspath(args.output)
+    os.makedirs(out_dir, exist_ok=True)
+    base = os.path.basename(model_path.rstrip("/\\"))
+    out_path = os.path.join(out_dir, f"{base}-{method}.gguf")
+
+    def _progress(done, total, name):
+        progress("quantize", pct=99.0 * done / max(total, 1),
+                 label=f"Exporting GGUF ({method}) {done}/{total}")
+
+    log(f"Native GGUF export: {model_path} -> {out_path} ({method})")
+    try:
+        report = export_gguf(model_path, out_path, method, progress=_progress)
+    except GgufExportError as exc:
+        fail(f"Native GGUF export failed: {exc}")
+
+    log(f"Native export complete: {report.tensors_total} tensors "
+        f"({report.tensors_quantized} quantized, {len(report.demoted)} demoted to F16, "
+        f"{len(report.skipped)} skipped) -> {out_path}")
+    for warning in report.warnings:
+        log(f"WARNING: {warning}")
+    log("DONE: GGUF written.")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Unsloth GGUF quantizer worker")
     p.add_argument("--model", required=False, help="HF folder or .safetensors file")
@@ -275,6 +323,11 @@ def main() -> None:
     p.add_argument(
         "--method", required=False,
         help="quantization_method id, or comma-joined ids for multi-quant",
+    )
+    p.add_argument(
+        "--backend", choices=("unsloth", "native"), default="unsloth",
+        help="worker engine: 'unsloth' (transformers+unsloth GGUF, default) or "
+             "'native' (numpy-only exporter, no transformers; any architecture)",
     )
     p.add_argument(
         "--imatrix", default="",
@@ -297,6 +350,15 @@ def main() -> None:
     if not (args.model and args.output and args.method):
         fail("--model, --output and --method are required (unless --list-methods).")
 
+    if args.backend == "native":
+        _run_native_backend(args)
+        return
+
+    _run_unsloth_backend(args)
+
+
+def _run_unsloth_backend(args) -> None:
+    """S4.2 dispatch target: the original unsloth flow (T7 et al.), verbatim."""
     from .run_config import parse_methods
 
     methods = parse_methods(args.method)
@@ -307,7 +369,6 @@ def main() -> None:
     for mid in methods:
         if mid not in METHODS_BY_ID:
             # Don't hard-fail on unknown ids: Unsloth's API surface changes.
-            # Warn instead (forward-compat escape hatch for brand-new ids).
             log(f"WARNING: '{mid}' is not in the known list; passing it through to Unsloth anyway.")
 
     # T7: gate IQ*/imatrix BEFORE the heavy unsloth import + model load.

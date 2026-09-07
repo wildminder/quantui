@@ -505,3 +505,58 @@ def test_build_cmd_single_method_unchanged():
         "--method", "q4_k_m",
         "--max-seq-length", "4096",
     ]
+
+
+# --------------------------------------------------------------------------- #
+# S4.3 (plan 2026-09-07): native-method validation + command build
+# --------------------------------------------------------------------------- #
+def test_validate_native_q8_0_ok():
+    assert rc.validate_gguf(_g("native_q8_0")) == []
+
+
+def test_validate_native_rejects_imatrix_pairing():
+    errs = rc.validate_gguf(_g("native_q8_0", "auto"))
+    assert len(errs) == 1
+    assert "imatrix" in errs[0].lower()
+
+
+def test_validate_native_multi_id_rejected():
+    errs = rc.validate_gguf(_g("native_q8_0, native_f16"))
+    assert len(errs) == 1
+    assert "exactly ONE method" in errs[0]
+
+
+def test_validate_native_unknown_id_error():
+    errs = rc.validate_gguf(_g("native_q6_k"))
+    assert any("native_q6_k" in e for e in errs)
+
+
+def test_validate_native_no_imatrix_requirement():
+    # Negative of the IQ* gate: native ids NEVER require an imatrix.
+    assert rc.validate_gguf(_g("native_f16", "")) == []
+
+
+def test_build_cmd_native_emits_backend_flag():
+    # Frozen argv snapshot for the native route.
+    g = rc.GgufConfig(
+        model="/m", output="/o", method="native_q8_0", pybin="PYBIN",
+        max_seq_length="4096",
+    )
+    assert rc.build_gguf_cmd(g) == [
+        "PYBIN", "-m", rc.WORKER_GGUF_MODULE,
+        "--model", "/m", "--output", "/o",
+        "--method", "native_q8_0",
+        "--max-seq-length", "4096",
+        "--backend", "native",
+    ]
+
+
+def test_build_cmd_unsloth_unchanged_for_official_ids():
+    # The native branch must not leak into unsloth commands.
+    g = rc.GgufConfig(
+        model="/m", output="/o", method="q4_k_m", pybin="PYBIN",
+        max_seq_length="4096", imatrix="auto",
+    )
+    cmd = rc.build_gguf_cmd(g)
+    assert "--backend" not in cmd
+    assert "--imatrix" in cmd

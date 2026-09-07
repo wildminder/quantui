@@ -47,7 +47,7 @@ async def test_picker_lists_all_35_methods_in_registry_order():
             except Exception:
                 continue
         sl = _picker(a)
-        assert sl.option_count == 35
+        assert sl.option_count == len(METHODS)  # 35 official + 4 native (S4.1)
         # Values follow the METHODS registry order (import order = registry
         # order -- the picker must NOT re-sort).
         assert [sl.get_option_at_index(i).value for i in range(sl.option_count)] == [

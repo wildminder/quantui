@@ -204,3 +204,48 @@ async def test_run_does_not_cancel_capability_probe():
         # is spawned; only the probe + the run worker are involved.
         await a.workers.wait_for_complete()
         await pilot.pause()
+
+
+# --------------------------------------------------------------------------- #
+# S4.4 (plan 2026-09-07): native-backend UI hints
+# --------------------------------------------------------------------------- #
+async def test_method_info_native_hint():
+    """Selecting a native id shows the NATIVE badge + no-transformers hint."""
+    from textual.widgets import Static
+
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a.query_one("#method", Input).value = "native_q8_0"
+        a.update_method_info()
+        await pilot.pause()
+        info = a.query_one("#method_info", Static)
+        text = str(info.render())
+        assert "NATIVE" in text
+        assert "no transformers" in text
+        assert "imatrix" not in text.lower()
+
+
+async def test_profile_roundtrips_native_id(tmp_path):
+    """Native ids are plain strings — profile save/reload just works (pin)."""
+    from textual.widgets import Input
+
+    a = appmod.QuantApp()
+    async with a.run_test():
+        a.query_one("#method", Input).value = "native_q4_0"
+        saved = a._profile_fields()
+    b = appmod.QuantApp()
+    async with b.run_test() as pilot2:
+        b._apply_profile_fields(saved)
+        await pilot2.pause()
+        assert b.query_one("#method", Input).value == "native_q4_0"
+
+
+def test_validate_native_never_requires_imatrix():
+    """Negative of the IQ* run gate through the app-level validator."""
+    from quantui import run_config as rc
+
+    g = rc.GgufConfig(
+        model=sys.executable, output="C:/tmp-out", pybin=sys.executable,
+        method="native_f16", imatrix="",
+    )
+    assert rc.validate_gguf(g) == []

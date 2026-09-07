@@ -41,6 +41,10 @@ class Backend(StrEnum):
     # comfy-kitchen + comfy.quant_ops (a ComfyUI-python interpreter). Required for
     # W4A4 (convrot_w4a4) and W4A8 (asym_w4a8_int8), which convert_to_quant cannot emit.
     COMFY_KITCHEN = "comfy_kitchen"
+    # Native GGUF exporter (plan 2026-09-07): numpy-only, no transformers /
+    # unsloth / torch — converts ANY HF safetensors checkpoint (unknown or
+    # TTS archs included) to spec-conformant GGUF via generic name mapping.
+    NATIVE = "native"
 
 
 # --------------------------------------------------------------------------- #
@@ -281,9 +285,35 @@ METHODS: list[QuantMethod] = [
     QuantMethod("iq4_xs", "IQ4_XS (imatrix)", Family.GGUF, Backend.UNSLOTH,
                 approx_bpw=4.25,
                 description="4.25 bpw. Needs an imatrix.", needs_imatrix=True),
+    # --- Native backend (plan 2026-09-07): no transformers/unsloth/torch. ----
+    # Appended AFTER the official 35 so the unsloth list order stays pinned.
+    QuantMethod("native_q8_0", "Q8_0 (native)", Family.GGUF, Backend.NATIVE,
+                approx_bpw=8.5,
+                description="Q8_0 via the native numpy exporter — no transformers/"
+                            "unsloth; converts any HF checkpoint (TTS / unknown archs "
+                            "included)."),
+    QuantMethod("native_q4_0", "Q4_0 (native)", Family.GGUF, Backend.NATIVE,
+                approx_bpw=4.55,
+                description="Q4_0 via the native numpy exporter — no transformers/"
+                            "unsloth; converts any HF checkpoint (TTS / unknown archs "
+                            "included)."),
+    QuantMethod("native_f16", "F16 (native)", Family.GGUF, Backend.NATIVE,
+                approx_bpw=16.0,
+                description="Half-precision GGUF via the native exporter — lossless "
+                            "for f16 sources; no transformers/unsloth needed."),
+    QuantMethod("native_f32", "F32 (native)", Family.GGUF, Backend.NATIVE,
+                approx_bpw=32.0,
+                description="Full-precision GGUF via the native exporter — no "
+                            "transformers/unsloth needed."),
 ]
 
 METHODS_BY_ID: dict[str, QuantMethod] = {m.id: m for m in METHODS}
+
+# The 4 native-backend method ids (Backend.NATIVE, plan 2026-09-07). A tuple
+# (ordered), consistent with ALLOWED_QUANT_IDS / IMATRIX_QUANT_IDS usage.
+NATIVE_QUANT_IDS: tuple[str, ...] = tuple(
+    m.id for m in METHODS if m.backend == Backend.NATIVE
+)
 
 # Shown under the GGUF method list. The UD-* ("Dynamic 2.0") mixes used to be
 # registry entries (q4_k_xl / q3_k_xl / q2_k_xl) but were removed:

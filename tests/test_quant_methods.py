@@ -11,6 +11,7 @@ from quantui.quant_methods import (
     INDEX_NAME,
     METHODS,
     METHODS_BY_ID,
+    NATIVE_QUANT_IDS,
     UD_INFO_FOOTER,
     Backend,
     ComfyFormat,
@@ -36,8 +37,10 @@ def test_enums_and_fields():
     assert Family.GGUF.value == "gguf"
     assert Backend.UNSLOTH.value == "unsloth"
     assert Backend.CTQ.value == "convert_to_quant"
-    # every existing GGUF entry is tagged correctly
+    # every official GGUF entry is tagged correctly (natives excluded — S4.1)
     for m in METHODS:
+        if m.backend == Backend.NATIVE:
+            continue
         assert m.family == Family.GGUF
         assert m.backend == Backend.UNSLOTH
         assert m.options == []
@@ -295,15 +298,21 @@ def test_needs_imatrix_is_kwarg():
 # T2 (plan 2026-08-31-gguf-unsloth-parity): METHODS == official 35-id surface
 # --------------------------------------------------------------------------- #
 def test_methods_ids_match_official_surface():
-    # save.py exposes 24 ALLOWED_QUANTS + 11 IMATRIX_QUANTS = 35, no more.
-    assert len(METHODS) == 35
-    assert {m.id for m in METHODS} == set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
+    # save.py exposes 24 ALLOWED_QUANTS + 11 IMATRIX_QUANTS = 35, plus the 4
+    # native-backend ids appended after the official surface (S4.1).
+    assert len(METHODS) == 35 + 4
+    assert {m.id for m in METHODS} == (
+        set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) | set(NATIVE_QUANT_IDS)
+    )
 
 
 def test_methods_order_pinned():
     # Registry order is the UI order: 24 ALLOWED (save.py dict order), then 11
-    # IMATRIX. This is the new order pin (the enums file pins Family/Backend only).
-    assert [m.id for m in METHODS] == list(ALLOWED_QUANT_IDS) + list(IMATRIX_QUANT_IDS)
+    # IMATRIX, then the 4 native ids. This is the new order pin (the enums file
+    # pins Family/Backend only).
+    assert [m.id for m in METHODS] == (
+        list(ALLOWED_QUANT_IDS) + list(IMATRIX_QUANT_IDS) + list(NATIVE_QUANT_IDS)
+    )
 
 
 def test_no_fake_dynamic_ids():
@@ -315,6 +324,44 @@ def test_no_fake_dynamic_ids():
         assert gone not in ids
     for m in METHODS:
         assert hasattr(m, "dynamic_v2") is False
+
+
+# --------------------------------------------------------------------------- #
+# S4.1: native backend methods (plan 2026-09-07)
+# --------------------------------------------------------------------------- #
+def test_native_backend_exists():
+    assert Backend.NATIVE == "native"
+
+
+def test_native_methods_registered():
+    """Exactly 4 native ids, all GGUF family, none needs an imatrix."""
+    natives = [m for m in METHODS if m.backend == Backend.NATIVE]
+    assert [m.id for m in natives] == list(NATIVE_QUANT_IDS) == [
+        "native_q8_0", "native_q4_0", "native_f16", "native_f32",
+    ]
+    assert all(m.family == Family.GGUF for m in natives)
+    assert all(m.needs_imatrix is False for m in natives)
+
+
+def test_native_ids_no_collision():
+    """Native ids are disjoint from the 35 official unsloth ids."""
+    official = set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
+    assert set(NATIVE_QUANT_IDS) & official == set()
+
+
+def test_native_methods_last():
+    """UI stability: the 4 native ids come after the official 35."""
+    official = set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
+    ids = [m.id for m in METHODS]
+    first_native = ids.index("native_q8_0")
+    assert all(m.backend == Backend.NATIVE for m in METHODS[first_native:])
+    assert {m.id for m in METHODS[:first_native]} == official
+
+
+def test_native_descriptions_mention_no_transformers():
+    for m in METHODS:
+        if m.backend == Backend.NATIVE:
+            assert "transformers" in m.description or "unsloth" in m.description, m.id
 
 
 def test_needs_imatrix_flags_correct():
