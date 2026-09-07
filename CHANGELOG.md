@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Native GGUF backend (plan 2026-09-07) — GGUF export without
+  transformers/unsloth/torch.** Four new method ids on a new
+  `Backend.NATIVE`: `native_q8_0`, `native_q4_0`, `native_f16`,
+  `native_f32`. The worker's `--backend native` branch runs BEFORE the
+  architecture gate and any heavy import, so any HF safetensors checkpoint
+  converts — including TTS/unknown architectures (e.g. VibeVoice-1.5B,
+  previously rejected twice: by transformers and by the arch blocklist).
+  Architecture: `gguf_names.py` (generic HF→GGUF name mapping, verbatim
+  port of quantui-rs `gguf_names.rs`; unmapped tensors pass through
+  unchanged), `gguf_qkernels.py` (Q8_0/Q4_0 numpy kernels byte-exact vs
+  the gguf-py/llama.cpp oracle goldens; deterministic tensor plan with
+  F16 demotion for non-block-divisible rows, token_embd stays F16),
+  `gguf_export.py` (streaming exporter + CLI `python -m
+  quantui.gguf_export`). `run_config` routes native ids to
+  `--backend native` (no imatrix; one method per run). Live parity vs the
+  user's quantui-rs VibeVoice-1.5B-q8_0 oracle: tensor-census equality
+  (skip-guarded; runs in the worker env).
 - **Native GGUF backend groundwork (plan 2026-09-07, STEP 0.1).** Pinned
   golden Q8_0/Q4_0 block bytes generated from the gguf-py oracle
   (`tests/golden/gguf_qgolden.py`): verbatim case-B hex (204/108 B with the

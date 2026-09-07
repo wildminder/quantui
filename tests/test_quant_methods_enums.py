@@ -59,7 +59,9 @@ def test_family_value_attribute():
 def test_member_order_is_preserved():
     # The data-driven UI iterates these members; order is load-bearing.
     assert [m.value for m in Family] == ["gguf", "comfy"]
-    assert [m.value for m in Backend] == ["unsloth", "convert_to_quant", "comfy_kitchen"]
+    assert [m.value for m in Backend] == [
+        "unsloth", "convert_to_quant", "comfy_kitchen", "native",
+    ]
 
 
 def test_json_serializable_as_value():

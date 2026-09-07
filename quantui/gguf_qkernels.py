@@ -47,8 +47,8 @@ def _blocks_of(arr: np.ndarray, block: int) -> np.ndarray:
     return flat.reshape(-1, block)
 
 
-def _f16_le(value: np.ndarray) -> bytes:
-    """Little-endian f16 bytes of a scalar/0-d value."""
+def _f16_le(value: np.floating | np.ndarray) -> bytes:
+    """Little-endian f16 bytes of a scalar or 0-d array value."""
     return np.asarray(value, dtype="<f2").tobytes()
 
 
@@ -147,6 +147,11 @@ _INT_DTYPES = frozenset({"I32", "U8", "BOOL"})
 
 NATIVE_METHODS: tuple[str, ...] = ("native_q8_0", "native_q4_0", "native_f16", "native_f32")
 
+# llama.cpp convention: the token-embedding table is NOT quantized with the
+# method — it stays F16 (quantui-rs does the same; verified against the
+# VibeVoice oracle: token_embd.weight qtype F16 while blk.* quantize).
+_PASSTHROUGH_F16_NAMES: frozenset[str] = frozenset({"token_embd.weight"})
+
 
 @dataclass(frozen=True)
 class TensorPlanItem:
@@ -186,6 +191,9 @@ def plan_tensor(name: str, dtype: str, shape: tuple[int, ...], method: str) -> T
 
     if ndim >= 2 and dtype in _FLOAT_DTYPES:
         ne0 = shape[-1]
+        if gguf_name in _PASSTHROUGH_F16_NAMES:
+            return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f16",
+                                  "token embedding stays F16 (llama.cpp convention)")
         if method == "native_q8_0":
             if ne0 % 32 == 0:
                 return TensorPlanItem(name, gguf_name, tuple(shape), "quant_q8_0", f"q8_0 (ne0={ne0})")

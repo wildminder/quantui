@@ -280,12 +280,30 @@ def validate_gguf(g: GgufConfig) -> list[str]:
     if not g.method:
         errors.append("Quantization method is required.")
     else:
+        from .gguf_qkernels import NATIVE_METHODS
+
+        native_ids = set(NATIVE_METHODS)
+        selected = set(g.method_list)
+        if selected & native_ids:
+            # --- S4.3: native-method validation rules ----------------------- #
+            if len(selected) > 1:
+                errors.append(
+                    "Native backend supports exactly ONE method per run — "
+                    "comma lists are an unsloth-backend feature."
+                )
+            if g.imatrix:
+                errors.append(
+                    "Native backend does not support imatrix quants (v1) — "
+                    "clear the imatrix field or use an unsloth IQ* id."
+                )
         # T5 (plan 2026-08-31-gguf-unsloth-parity): gate methods BEFORE the
         # run. unsloth only accepts the 35 official ids, and it fails AFTER
         # a full model load -- catching typos and missing imatrices here
         # turns a multi-minute failure into an instant one.
-        _valid_ids = _ALL_QUANT_IDS  # (allowed | imatrix) single source
+        _valid_ids = _ALL_QUANT_IDS | native_ids  # official + native surface
         for mid in g.method_list:
+            if mid in native_ids:
+                continue  # native ids validated above
             if mid not in _valid_ids:
                 errors.append(
                     f"Unknown quantization method '{mid}' -- pick one from the dropdown."
@@ -362,6 +380,8 @@ def validate(cfg: RunConfig) -> list[str]:
 # --------------------------------------------------------------------------- #
 def build_gguf_cmd(g: GgufConfig) -> list[str]:
     """Build the ``worker.py`` argument vector for a GGUF run."""
+    from .gguf_qkernels import NATIVE_METHODS
+
     cmd: list[str] = [
         g.pybin or sys.executable,
         "-m",
@@ -377,6 +397,10 @@ def build_gguf_cmd(g: GgufConfig) -> list[str]:
         "--max-seq-length",
         g.max_seq_length or "4096",
     ]
+    # S4.3: native ids route to the native exporter (no transformers).
+    if g.method.strip() in NATIVE_METHODS:
+        cmd += ["--backend", "native"]
+        return cmd  # no imatrix / hub flags on the native path
     # T6: "" = no imatrix; "auto" = fetch the upstream Unsloth imatrix at
     # run time; anything else = local path (validate_gguf checked existence).
     if g.imatrix:

@@ -15,6 +15,7 @@ from quantui.quant_methods import (
     ALLOWED_QUANT_IDS,
     IMATRIX_QUANT_IDS,
     METHODS,
+    NATIVE_QUANT_IDS,
 )
 
 
@@ -75,14 +76,15 @@ async def test_iq_star_preselected_roundtrips():
 
 
 async def test_all_official_ids_present_as_option_values():
-    # The 35-option surface must cover EXACTLY the official unsloth ids:
-    # every ALLOWED_QUANT id and every IMATRIX_QUANT id is an option value.
+    # The picker covers the 35 official unsloth ids PLUS the 4 native ids
+    # (S4.1): official ids are a subset, natives complete the surface.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
         sl = await _open_picker(a, pilot)
         values = {sl.get_option_at_index(i).value for i in range(sl.option_count)}
-        assert values == set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
-        assert sl.option_count == len(METHODS) == 35
+        assert set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) <= values
+        assert values == set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) | set(NATIVE_QUANT_IDS)
+        assert sl.option_count == len(METHODS) == 39
 
 
 async def test_hand_typed_typo_still_caught_by_validation():
