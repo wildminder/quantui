@@ -28,18 +28,22 @@ BASELINE: dict[str, int] = {
     "comfy_quant_schema.py": 0,
     "dtype_cast.py": 0,     # pure bit-math module (STEP 2.1): no except blocks by design
     "form_state.py": 0,     # IMP-006 extraction (2026-09-04): verbatim move from app.py
+    "gguf_names.py": 0,     # native GGUF backend (S1.1): pure mapping, no except blocks
     "handlers.py": 0,
     "ids.py": 0,
     "incremental_safetensors.py": 0,
     "live_progress.py": 0,
     "model_audit.py": 0,    # pure stdlib audit module (STEP 1.1): no except blocks by design
     "panels.py": 0,         # narrowed to NoMatches (STEP 2.5)
-    # Reserved names for planned extractions (IMP-001/NTH-004); the stale-entry
-    # check below ignores them until they exist.
+    # Reserved names for planned extractions (IMP-001/NTH-004) and the native
+    # GGUF backend (plan 2026-09-07); the stale-entry check below ignores them
+    # until they exist, and 0 tolerance applies the moment they do.
     "palette.py": 0,          # created later by IMP-001 extraction
     "app_css.py": 0,          # created later by IMP-001 extraction
     "header_progress.py": 0,  # created later by IMP-001 extraction
     "path_checks.py": 0,      # created later by NTH-004 extraction
+    "gguf_qkernels.py": 0,    # native GGUF backend (S2.x): pure numpy kernels
+    "gguf_export.py": 0,      # native GGUF backend (S3.1): streaming exporter
     "profiles_store.py": 0,   # narrowed to (OSError, JSONDecodeError) (STEP 2.5)
     "pt_convert.py": 0,
     "quant_methods.py": 0,    # boundary-marked eval guard (STEP 2.5)
@@ -125,7 +129,12 @@ def test_baseline_covers_all_modules():
     Reserved future-module names (planned extractions) are exempt from the
     stale check but still enforce 0 tolerance once the files appear.
     """
-    _RESERVED = {"palette.py", "app_css.py", "header_progress.py", "path_checks.py"}
+    _RESERVED = {
+        "palette.py", "app_css.py", "header_progress.py", "path_checks.py",
+        # Native GGUF backend modules (plan 2026-09-07) — registered now so
+        # 0 tolerance applies the moment each file appears (S2.x / S3.1).
+        "gguf_qkernels.py", "gguf_export.py",
+    }
     actual = {p.name for p in QUANTUI.glob("*.py")}
     missing = actual - set(BASELINE)
     stale = (set(BASELINE) - actual) - _RESERVED
