@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-08
+
 ### Added
 - **Native GGUF backend (plan 2026-09-07) — GGUF export without
   transformers/unsloth/torch.** Four new method ids on a new
