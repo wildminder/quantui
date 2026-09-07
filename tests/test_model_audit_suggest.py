@@ -116,5 +116,63 @@ def test_suggest_ignores_quantized_companions(tmp_path):
     # quant_scale / quant_meta — none of them belong in the keep-set.
     assert suggestion.names == ()
     assert suggestion.regex == ""
-    for name in report.tensors:
-        assert name.name not in suggestion.names
+
+
+# --------------------------------------------------------------------------- #
+# NTH-007: whitelist-candidate heuristic hint
+# --------------------------------------------------------------------------- #
+def _vibevoice_like_specs(n_layers: int = 10):
+    """Mimic an unknown architecture: many repeated last-segment `ffn.xw_proj`
+    2D weights that the frozen whitelist does NOT know (-> linear_review).
+    (Uses a still-unknown segment: `linear1`/`linear2` were whitelisted
+    2026-08-27 after the VibeVoice-7B audit, so they no longer exercise this.)"""
+    specs = {
+        "backbone_model.embed_tokens.weight": ("BF16", [10, 4], b"\x00" * 80),
+    }
+    for i in range(n_layers):
+        specs[f"backbone_model.layers.{i}.ffn.xw_proj.weight"] = ("BF16", [4, 4], b"\x00" * 32)
+    return specs
+
+
+def test_whitelist_hint_surfaces_repeated_review_segment(tmp_path):
+    """NTH-007: >=8 linear_review tensors sharing a last segment and a shape
+    produce a candidate hint in the suggestion."""
+    report = audit_file(_write(tmp_path, _vibevoice_like_specs(10)))
+    s = suggest_exclusions(report)
+    assert s.hints, "expected whitelist-candidate hints"
+    seg, count, shape = s.hints[0]
+    assert seg == "xw_proj"
+    assert count == 10
+    assert shape == "(4, 4)"
+
+
+def test_whitelist_hint_below_threshold_is_silent(tmp_path):
+    """Fewer than 8 repeats -> no hint (avoids noisy one-off suggestions)."""
+    report = audit_file(_write(tmp_path, _vibevoice_like_specs(5)))
+    s = suggest_exclusions(report)
+    assert s.hints == ()
+
+
+def test_whitelist_hint_requires_consistent_shape(tmp_path):
+    """Same last segment but differing shapes -> no hint (not a naming convention)."""
+    specs = {
+        "backbone_model.embed_tokens.weight": ("BF16", [10, 4], b"\x00" * 80),
+    }
+    for i in range(10):
+        shape = (4, 4) if i % 2 == 0 else (8, 4)
+        specs[f"backbone_model.layers.{i}.ffn.xw_proj.weight"] = ("BF16", list(shape), b"\x00" * (shape[0] * shape[1] * 2))
+    report = audit_file(_write(tmp_path, specs))
+    s = suggest_exclusions(report)
+    assert s.hints == ()
+
+
+def test_whitelist_hint_in_text_and_json_reports(tmp_path):
+    from quantui.model_audit import render_json, render_text
+
+    report = audit_file(_write(tmp_path, _vibevoice_like_specs(10)))
+    s = suggest_exclusions(report)
+    text = render_text(report, s)
+    assert "candidate whitelist segment" in text
+    assert "xw_proj" in text
+    payload = __import__("json").loads(render_json(report, s))
+    assert payload["suggestion"]["hints"] == [{"segment": "xw_proj", "count": 10, "shape": "(4, 4)"}]

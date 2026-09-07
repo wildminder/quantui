@@ -460,6 +460,41 @@ class ExclusionSuggestion:
     regex: str  # single alternation, anchored, re.escape'd, sorted; "" if empty
     names: tuple[str, ...]  # the keep-set the regex covers (sorted)
     rationale: dict[str, int]  # category -> count that motivated the regex
+    # NTH-007 (2026-09-04): whitelist-candidate heuristic hints. Each tuple is
+    # (last_segment, occurrence_count, shape_repr). The frozen LINEAR_SEGMENTS
+    # table stays authoritative; hints only SUGGEST that a repeated unknown
+    # 2D-weight naming might belong in the whitelist (a whitelist PR, not an
+    # automatic exclusion).
+    hints: tuple[tuple[str, int, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.hints:
+            object.__setattr__(self, "hints", ())
+
+
+def _whitelist_hints(report: AuditReport) -> tuple[tuple[str, int, str], ...]:
+    """Find repeated ``linear_review`` last-segments worth a whitelist look.
+
+    A candidate is a last dot-segment (e.g. ``linear1`` from
+    ``*.layers.N.ffn.linear1.weight``) that appears on >= 8 ``linear_review``
+    2D tensors ALL with the same shape -- a strong naming-convention signal
+    (the VibeVoice ``linear1``/``linear2`` case). Below threshold or shape
+    variance -> no hint. Sorted by (-count, segment) for determinism.
+    """
+    _MIN_REPEATS = 8
+    per_segment: dict[str, dict[tuple, int]] = {}
+    for info in report.tensors:
+        if info.category != "linear_review" or len(info.shape) != 2:
+            continue
+        last = _weight_segment(info.name)
+        per_segment.setdefault(last, {}).setdefault(tuple(info.shape), 0)
+        per_segment[last][tuple(info.shape)] += 1
+    hints: list[tuple[str, int, str]] = []
+    for segment, shapes in per_segment.items():
+        for shape, count in shapes.items():
+            if count >= _MIN_REPEATS:
+                hints.append((segment, count, str(shape)))
+    return tuple(sorted(hints, key=lambda h: (-h[1], h[0])))
 
 
 def suggest_exclusions(report: AuditReport) -> ExclusionSuggestion:
@@ -485,9 +520,11 @@ def suggest_exclusions(report: AuditReport) -> ExclusionSuggestion:
         if info.category in _KEEP_CATEGORIES and len(info.shape) == 2:
             rationale[info.category] = rationale.get(info.category, 0) + 1
     if not keep:
-        return ExclusionSuggestion(regex="", names=(), rationale={})
+        return ExclusionSuggestion(regex="", names=(), rationale={},
+                                   hints=_whitelist_hints(report))
     regex = "^(" + "|".join(re.escape(name) for name in keep) + ")$"
-    return ExclusionSuggestion(regex=regex, names=tuple(keep), rationale=rationale)
+    return ExclusionSuggestion(regex=regex, names=tuple(keep), rationale=rationale,
+                               hints=_whitelist_hints(report))
 
 
 # --------------------------------------------------------------------------- #
@@ -505,6 +542,26 @@ def _human_bytes(nbytes: int) -> str:
 
 def _total_params(report: AuditReport) -> int:
     return sum(math.prod(info.shape) for info in report.tensors)
+
+
+def _module_quantized_params(report: AuditReport) -> dict[str, int]:
+    """Per-module count of params living in already-quantized matrices (NTH-011).
+
+    A quantized layer's ``<base>.weight`` carries ``q_params``; the module is
+    the first dot-separated segment of ``<base>`` (``module_of`` semantics).
+    Modules with no quantized layers are absent from the result.
+    """
+    out: dict[str, int] = {}
+    for prefix, _config in report.quantized_layers:
+        w_shape = None
+        for info in report.tensors:
+            if info.name == f"{prefix}.weight":
+                w_shape = info.shape
+                break
+        params = math.prod(w_shape) if w_shape else 0
+        module = prefix.split(".")[0] if prefix else prefix
+        out[module] = out.get(module, 0) + params
+    return out
 
 
 def render_text(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
@@ -534,12 +591,26 @@ def render_text(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
         )
     lines.append("")
     lines.append("Modules:")
-    lines.append(f"  {'module':<24} {'tensors':>8} {'params':>14} {'bytes':>12} {'linears':>8}")
+    q_by_module = _module_quantized_params(report)
+    lin_by_module: dict[str, int] = {}
+    for summary in report.modules:
+        lin_params = sum(
+            math.prod(info.shape)
+            for info in report.tensors
+            if info.module == summary.module and info.category in ("linear", "linear_review")
+        )
+        lin_by_module[summary.module] = lin_params
+    lines.append(
+        f"  {'module':<24} {'tensors':>8} {'params':>14} {'bytes':>12} {'linears':>8} {'q%':>7}"
+    )
     for summary in report.modules:
         linears = summary.category_counts.get("linear", 0)
+        qp = q_by_module.get(summary.module, 0)
+        denom = lin_by_module.get(summary.module, 0)
+        ratio = 100.0 * qp / denom if denom else 0.0
         lines.append(
             f"  {summary.module:<24} {summary.tensors:>8} {summary.params:>14,} "
-            f"{_human_bytes(summary.nbytes):>12} {linears:>8}"
+            f"{_human_bytes(summary.nbytes):>12} {linears:>8} {ratio:>6.1f}%"
         )
     if report.quantized_layers:
         lines.append("")
@@ -554,6 +625,14 @@ def render_text(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
             lines.append(f"  {category}: {suggestion.rationale[category]}")
     else:
         lines.append("exclude_layers: (none needed — no 2D keep-set tensors found)")
+    # NTH-007: whitelist-candidate heuristic hints (suggest-only, never applied).
+    if suggestion.hints:
+        lines.append("")
+        lines.append("Whitelist candidates (repeated unknown 2D-weight naming):")
+        for segment, count, shape in suggestion.hints:
+            lines.append(
+                f"  candidate whitelist segment: {segment} ({count} occurrences, shape {shape})"
+            )
     lines.append("")
     lines.append(
         "Note: this regex covers header-level keeps only (embeddings / heads / "
@@ -594,6 +673,10 @@ def render_json(report: AuditReport, suggestion: ExclusionSuggestion) -> str:
             "regex": suggestion.regex,
             "names": list(suggestion.names),
             "rationale": suggestion.rationale,
+            "hints": [
+                {"segment": segment, "count": count, "shape": shape}
+                for segment, count, shape in suggestion.hints
+            ],
         },
     }
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"

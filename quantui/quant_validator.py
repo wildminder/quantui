@@ -132,11 +132,10 @@ def validate_comfy_quant(path: str, *, numeric: bool = False) -> ValidationRepor
 
     markers = [k for k in keys if k.endswith(".comfy_quant")]
     scales = [k for k in keys if k.endswith(".weight_scale")]
-    # NOTE: orphan detection below covers .weight_scale only. `.input_scale`
-    # (block-wise INT8, written under the same <base> as .comfy_quant per
-    # tensor_quant.py) is deliberately NOT checked -- adding a new error class
-    # to a validation report is a behavior change, not a lint fix. Tracked as
-    # NTH-012 in the issues tracker.
+    # NTH-012 (fixed 2026-09-04): `.input_scale` (block-wise INT8, written under
+    # the same <base> as .comfy_quant per tensor_quant.py) is now covered by the
+    # symmetric orphan detection below -- a corrupt/partial file that lost the
+    # marker but kept the scale no longer passes validation.
 
     if not markers:
         report.add_warning(
@@ -243,10 +242,20 @@ def validate_comfy_quant(path: str, *, numeric: bool = False) -> ValidationRepor
     # --- orphan detection ----------------------------------------------------
     orphan_scales = [s for s in scales if f"{s[:-len('.weight_scale')]}.comfy_quant" not in key_set]
     orphan_markers = [m for m in markers if f"{m[:-len('.comfy_quant')]}.weight_scale" not in key_set]
+    # NTH-012: symmetric orphan check for .input_scale (block-wise INT8).
+    input_scales = [k for k in keys if k.endswith(".input_scale")]
+    orphan_input_scales = [
+        s for s in input_scales
+        if f"{s[:-len('.input_scale')]}.comfy_quant" not in key_set
+    ]
     if orphan_scales:
         report.add_error(f"orphan weight_scale entries (no matching .comfy_quant): {orphan_scales[:5]}")
     if orphan_markers:
         report.add_error(f"orphan .comfy_quant entries (no matching .weight_scale): {orphan_markers[:5]}")
+    if orphan_input_scales:
+        report.add_error(
+            f"orphan input_scale entries (no matching .comfy_quant): {orphan_input_scales[:5]}"
+        )
 
     _summarize(report, keys, shapes, dtypes, q_params, q_layers, gs_hist, p)
 
