@@ -74,7 +74,11 @@ def test_parity_tensor_census(tmp_path):
 
 
 def test_parity_lm_block_numeric(tmp_path):
-    """5 sampled blk.* Q8_0 tensors: dequantized values agree within one step."""
+    """FULL-payload comparison: EVERY Q8_0 LM tensor (196 in the oracle) must
+    dequantize within one quant step of the oracle's (kernels are
+    convention-identical; exact byte equality is NOT required because the
+    oracle may quantize from a different intermediate dtype — pinned
+    explicitly)."""
     import gguf
     import numpy as np
 
@@ -84,16 +88,25 @@ def test_parity_lm_block_numeric(tmp_path):
     ours_by_name = {t.name: t for t in our_reader.tensors}
     oracle_by_name = {t.name: t for t in oracle_reader.tensors}
 
-    sampled = [t.name for t in oracle_reader.tensors
-               if t.name.startswith("blk.") and "attn_q" in t.name][:5]
-    assert sampled, "no LM attn_q tensors found in oracle"
-    for name in sampled:
+    q8_lm = [t.name for t in oracle_reader.tensors
+             if t.name.startswith("blk.") and t.tensor_type == gguf.GGMLQuantizationType.Q8_0]
+    assert len(q8_lm) >= 150, f"expected ~196 Q8_0 LM tensors, got {len(q8_lm)}"
+    worst_err, worst_name = 0.0, ""
+    for name in q8_lm:
         o = gguf.dequantize(oracle_by_name[name].data, oracle_by_name[name].tensor_type)
         m = gguf.dequantize(ours_by_name[name].data, ours_by_name[name].tensor_type)
         assert o.shape == m.shape, name
         # both are ~Q8_0 of the same bf16 source: within one quant step + bf16 input rounding
         scale = float(np.abs(o).max()) / 127.0 + 1e-9
-        assert float(np.abs(m.astype(np.float32) - o.astype(np.float32)).max()) <= scale * 2.0, name
+        err = float(np.abs(m.astype(np.float32) - o.astype(np.float32)).max())
+        if err > worst_err:
+            worst_err, worst_name = err, name
+        assert err <= scale, (
+            f"{name}: err {err} exceeds one quant step {scale} — convention mismatch"
+        )
+    # record the worst offender for the test log
+    print(f"\n[parity] {len(q8_lm)} Q8_0 LM tensors checked; worst err "
+          f"{worst_err:.6f} at {worst_name}")
 
 
 def test_parity_audio_passthrough_names(tmp_path):
