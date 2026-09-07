@@ -125,6 +125,59 @@ def test_orphan_scale_detected(tmp_path):
     assert any("no .comfy_quant markers" in w for w in r.warnings)
 
 
+def test_orphan_input_scale_detected(tmp_path):
+    """NTH-012: an .input_scale whose <base>.comfy_quant marker is gone is an error.
+
+    tensor_quant.py writes .input_scale for block-wise INT8 under the SAME
+    <base> as the .comfy_quant descriptor, so a corrupt/partial file can lose
+    the marker while the scale survives -- the symmetric orphan check must
+    flag that (previously only .weight_scale was covered).
+    """
+    # One VALID blockwise layer (marker present) so we're on the marker path...
+    specs = {
+        "good.weight": ("I8", [16, 8], np.random.randint(-120, 120, size=(16, 8), dtype=np.int8).tobytes()),
+        "good.weight_scale": ("F32", [4, 2], np.full((4, 2), 0.01, dtype=np.float32).tobytes()),
+        "good.input_scale": ("F32", [], np.array(1.0, dtype=np.float32).tobytes()),
+        "good.comfy_quant": ("U8", [len(encode_comfy_quant_config(BLOCK_CFG))],
+                             encode_comfy_quant_config(BLOCK_CFG)),
+        # ...and one ORPHAN input_scale (marker + weight_scale lost, scale survived).
+        "bad.input_scale": ("F32", [], np.array(1.0, dtype=np.float32).tobytes()),
+    }
+    f = tmp_path / "orphan-is.st"
+    f.write_bytes(write_safetensors(specs))
+    r = qv.validate_comfy_quant(str(f))
+    assert not r.ok, "orphan .input_scale must fail validation (NTH-012)"
+    assert any("orphan input_scale" in e for e in r.errors), r.errors
+
+
+def test_orphan_input_scale_with_orphan_weight_scale_also_flagged(tmp_path):
+    """Both orphan classes can fire on the same file; both are reported."""
+    specs = {
+        "good.weight": ("I8", [16, 8], np.random.randint(-120, 120, size=(16, 8), dtype=np.int8).tobytes()),
+        "good.weight_scale": ("F32", [4, 2], np.full((4, 2), 0.01, dtype=np.float32).tobytes()),
+        "good.input_scale": ("F32", [], np.array(1.0, dtype=np.float32).tobytes()),
+        "good.comfy_quant": ("U8", [len(encode_comfy_quant_config(BLOCK_CFG))],
+                             encode_comfy_quant_config(BLOCK_CFG)),
+        "bad.input_scale": ("F32", [], np.array(1.0, dtype=np.float32).tobytes()),
+        "bad2.weight_scale": ("F32", [16, 1], np.full((16, 1), 0.01, dtype=np.float32).tobytes()),
+    }
+    f = tmp_path / "orphan-both.st"
+    f.write_bytes(write_safetensors(specs))
+    r = qv.validate_comfy_quant(str(f))
+    assert not r.ok
+    assert any("orphan input_scale" in e for e in r.errors), r.errors
+    assert any("orphan weight_scale" in e for e in r.errors), r.errors
+
+
+def test_valid_blockwise_input_scale_still_passes(tmp_path):
+    """NTH-012 guard: the new check must not false-positive on well-formed files."""
+    f = tmp_path / "ok.st"
+    _write_quant_file(str(f), [("m", (16, 8), BLOCK_CFG)])
+    r = qv.validate_comfy_quant(str(f))
+    assert r.ok
+    assert not any("orphan" in e for e in r.errors)
+
+
 def test_no_markers_is_ok_with_warning(tmp_path):
     specs = {"w.weight": ("F32", [4, 4], np.full((4, 4), 0.1, dtype=np.float32).tobytes())}
     f = tmp_path / "plain.st"

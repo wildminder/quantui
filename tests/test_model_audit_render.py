@@ -114,3 +114,56 @@ def test_render_text_bytes_humanized(tmp_path):
     assert report.total_bytes == seven_gib
     text = render_text(report, suggest_exclusions(report))
     assert "7.00 GiB" in text
+
+
+# --------------------------------------------------------------------------- #
+# NTH-011: per-module quantized-ratio column
+# --------------------------------------------------------------------------- #
+def test_module_table_has_quantized_ratio_column(tmp_path):
+    """NTH-011: the Modules table shows a `q%` column (share of the module's
+    params that are already quantized), so partially-quantized checkpoints are
+    obvious at a glance."""
+    report = audit_file(_write(tmp_path, _two_module_specs()))
+    text = render_text(report, suggest_exclusions(report))
+    header = next(ln for ln in text.splitlines() if ln.strip().startswith("module"))
+    assert "q%" in header, header
+
+
+def test_module_ratio_zero_for_raw_file(tmp_path):
+    """A raw (unquantized) file shows 0.0% for every module."""
+    report = audit_file(_write(tmp_path, _two_module_specs()))
+    text = render_text(report, suggest_exclusions(report))
+    backbone_row = next(ln for ln in text.splitlines() if "backbone_model" in ln)
+    assert "0.0%" in backbone_row
+
+
+def test_module_ratio_partial_for_hybrid_checkpoint(tmp_path):
+    """A file with ONE quantized layer in a multi-linear module shows a
+    partial ratio. The q% column measures the share of the module's
+    MATRIX params (linear+linear_review weights) that are quantized:
+    backbone_model has two 4x4 linears; quantizing one -> 50.0%."""
+    # backbone_model has one 4x4 linear (q_proj) + one 4-vector norm.
+    specs = _two_module_specs()
+    # Add a second linear to backbone_model so its linear count is 2.
+    specs["backbone_model.layers.1.mlp.down_proj.weight"] = ("BF16", [4, 4], b"\x00" * 32)
+    path = _write(tmp_path, specs)
+    report = audit_file(path)
+    assert report.total_bytes > 0
+
+    # Quantize exactly ONE of backbone_model's two linears.
+    quantized = serialize_comfy_quant_layer(
+        "backbone_model.layers.0.self_attn.q_proj",
+        {
+            "weight": ("I8", [4, 4], b"\x01" * 16),
+            "weight_scale": ("F32", [1], b"\x00\x00\x80\x3f"),
+        },
+        default_quant_config(FORMAT_INT8_TENSORWISE),
+    )
+    # Rebuild the file with the quantized layer replacing the BF16 q_proj.
+    specs2 = {k: v for k, v in specs.items()
+              if k != "backbone_model.layers.0.self_attn.q_proj.weight"}
+    specs2.update(quantized)
+    report2 = audit_file(_write(tmp_path, specs2, name="hybrid.safetensors"))
+    text = render_text(report2, suggest_exclusions(report2))
+    backbone_row = next(ln for ln in text.splitlines() if "backbone_model" in ln)
+    assert "50.0%" in backbone_row, backbone_row
