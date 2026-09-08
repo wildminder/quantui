@@ -146,11 +146,6 @@ STOP_CONFIRM_AFTER_S = 15
 #   * a bar with no trailing metadata bracket ('[') -- some wrappers omit it.
 # Progress regexes + parsing/classification now live in quantui/stream_parser.py
 
-# ProgressView (the #live_progress widget class) moved verbatim into panels.py
-# (S0.3 compose-seam extraction); re-exported here so existing
-# ``appmod.ProgressView`` references (tests included) keep working.
-from .panels import ProgressView  # noqa: F401,E402
-
 
 class QuantApp(
     handlers.HandlersMixin,
