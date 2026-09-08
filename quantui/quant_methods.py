@@ -289,26 +289,19 @@ METHODS: list[QuantMethod] = [
     # Appended AFTER the official 35 so the unsloth list order stays pinned.
     QuantMethod("native_q8_0", "Q8_0 (native)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=8.5,
-                description="Q8_0 via the native numpy exporter — no transformers/"
-                            "unsloth; converts any HF checkpoint (TTS / unknown archs "
-                            "included)."),
+                description="Q8_0 without transformers/unsloth; any architecture."),
     QuantMethod("native_q4_0", "Q4_0 (native)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=4.55,
-                description="Q4_0 via the native numpy exporter — no transformers/"
-                            "unsloth; converts any HF checkpoint (TTS / unknown archs "
-                            "included)."),
+                description="Q4_0 without transformers/unsloth; any architecture."),
     QuantMethod("native_f16", "F16 (native)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=16.0,
-                description="Half-precision GGUF via the native exporter — lossless "
-                            "for f16 sources; no transformers/unsloth needed."),
+                description="Half-precision GGUF; lossless for f16 sources."),
     QuantMethod("native_bf16", "BF16 (native, lossless)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=16.0,
-                description="BF16 GGUF via the native exporter — LOSSLESS for bf16 "
-                            "sources (no f16 inf-overflow risk); no transformers/unsloth."),
+                description="BF16 GGUF; lossless for bf16 sources (no f16 overflow risk)."),
     QuantMethod("native_f32", "F32 (native)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=32.0,
-                description="Full-precision GGUF via the native exporter — no "
-                            "transformers/unsloth needed."),
+                description="Full-precision GGUF; no quality loss."),
 ]
 
 METHODS_BY_ID: dict[str, QuantMethod] = {m.id: m for m in METHODS}

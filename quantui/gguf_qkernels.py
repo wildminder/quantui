@@ -56,14 +56,25 @@ def _f16_le(value: np.floating | np.ndarray) -> bytes:
 # Q8_0
 # --------------------------------------------------------------------------- #
 def quantize_q8_0(arr: np.ndarray) -> bytes:
-    """Quantize f32 -> Q8_0 block bytes (llama.cpp-exact, golden-pinned)."""
+    """Quantize f32 -> Q8_0 block bytes (llama.cpp-exact, golden-pinned).
+
+    Rounding is HALF-AWAY-FROM-ZERO on ``x * (1/d)`` with an f32 reciprocal —
+    exactly what llama.cpp's ``roundf(x * id)`` does (quantui-rs mirrors it).
+    numpy ``rint`` (ties-to-even) + true division flips ~0.1-0.5% of
+    boundary codes by +-1 vs the reference; audibly measurable in
+    voice-cloning quality, so bit-parity matters here (fixed 2026-09-08,
+    found by full-byte diff vs the user's quantui-rs VibeVoice oracle).
+    """
     _check_ne0(arr, Q8_0_BLOCK_ELEMS, "quantize_q8_0")
     blocks = _blocks_of(arr, Q8_0_BLOCK_ELEMS)
     maxabs = np.max(np.abs(blocks), axis=1)  # (n_blocks,) f32
     d = (maxabs / 127.0).astype(np.float32)
-    # gguf-py/llama.cpp store d=0 blocks as scale +0.0 with zero codes.
-    safe_d = np.where(maxabs == 0, np.float32(1.0), d)
-    q = np.clip(np.rint(blocks / safe_d[:, None]), -127, 127).astype(np.int8)
+    with np.errstate(divide="ignore"):
+        inv = np.where(maxabs == 0, np.float32(0), np.float32(1.0) / d)
+    prod = blocks * inv[:, None]
+    # half-away-from-zero: sign * floor(|v| + 0.5); == llama.cpp roundf()
+    q = (np.sign(prod) * np.floor(np.abs(prod) + 0.5)).astype(np.int32)
+    q = np.clip(q, -127, 127).astype(np.int8)
     q[maxabs == 0] = 0
     out = bytearray()
     for i in range(q.shape[0]):

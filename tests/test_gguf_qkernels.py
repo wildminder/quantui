@@ -75,12 +75,28 @@ def test_q8_0_determinism():
     assert quantize_q8_0(arr) == quantize_q8_0(arr)
 
 
-def test_q8_0_negative_extremes_roundtrip():
-    """Signed extremes map to ±127-capped codes; roundtrip stays in bound.
+def test_q8_0_rounding_is_half_away_from_zero_on_x_inv():
+    """llama.cpp roundf(x * (1/d)) semantics — rint(x/d) flips boundary codes.
 
-    (Extremes stay within f16-scale range — 1e9 would overflow f16, which is
-    an upstream llama.cpp property, not a kernel bug.)
+    Exact-tie case: x = d/2 * (2k+1) style values. Construct x where x/d is
+    exactly representable with a .5 fraction and x*inv is too: the two modes
+    disagree (rint -> even, half-away -> odd-signed away from zero).
     """
+    import numpy as np
+
+    # d = 4.0 -> amax = 508.0; x = 2.0 -> x/d = 0.5 (tie: rint->0, away->1)
+    # x = 6.0 -> 1.5 (tie: rint->2, away->2 even? no: 1.5 -> rint 2, away 2)
+    # Use x = -2.0 -> -0.5: rint -> -0 (0), half-away -> -1. That's the pin.
+    arr = np.zeros((1, 32), dtype=np.float32)
+    arr[0, 0] = 508.0  # amax -> d = 4.0
+    arr[0, 1] = 2.0    # +0.5 tie
+    arr[0, 2] = -2.0   # -0.5 tie
+    raw = quantize_q8_0(arr)
+    codes = np.frombuffer(raw, np.uint8).reshape(34)[2:].view(np.int8)
+    assert codes[0] == 127 and codes[1] == 1 and codes[2] == -1, codes[:4]
+
+
+def test_q8_0_negative_extremes_roundtrip():
     rng = np.random.default_rng(7)
     arr = rng.standard_normal((4, 64)).astype(np.float32)
     arr[0, 0] = 1e4  # large but f16-safe scale

@@ -221,7 +221,8 @@ async def test_method_info_native_hint():
         info = a.query_one("#method_info", Static)
         text = str(info.render())
         assert "NATIVE" in text
-        assert "no transformers" in text
+        assert "transformers" in text  # from the trimmed description
+        assert "converts any" not in text  # wordy hint is gone
         assert "imatrix" not in text.lower()
 
 

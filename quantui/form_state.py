@@ -157,7 +157,7 @@ class FormStateMixin:
             if m.backend == Backend.NATIVE:
                 # S4.4: native ids get their own guidance (no imatrix hint).
                 badge = "[NATIVE] "
-                hint = " (native backend — no transformers/unsloth; converts any architecture)"
+                hint = ""  # the description already says it all
             # The badge is emphasised with real markup; the literal brackets it
             # displays are escaped (see _literal) so they survive rendering.
             head = f"[b yellow]{_literal(badge.strip())}[/b yellow] " if badge else ""
