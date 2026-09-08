@@ -35,10 +35,21 @@ CHANGELOG_TMPL = """# Changelog
 """
 
 
+PYPROJECT_TMPL = """[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fixture"
+version = "{version}"
+"""
+
+
 def _write_fixture(root: Path, version: str = "0.1.0") -> None:
     (root / "quantui").mkdir(parents=True)
     (root / "quantui" / "__init__.py").write_text(INIT_TMPL.format(version=version), encoding="utf-8")
     (root / "CHANGELOG.md").write_text(CHANGELOG_TMPL.format(version=version), encoding="utf-8")
+    (root / "pyproject.toml").write_text(PYPROJECT_TMPL.format(version=version), encoding="utf-8")
 
 
 def _run_bump(root: Path, level: str) -> subprocess.CompletedProcess:
@@ -52,6 +63,17 @@ def test_version_parses_semver():
     from quantui import __version__
 
     assert SEMVER_RE.match(__version__), __version__
+
+
+def test_pyproject_version_matches_init():
+    import tomllib
+
+    from quantui import __version__
+
+    data = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    assert data["project"]["version"] == __version__, (
+        "pyproject.toml [project].version must stay in sync with quantui.__version__"
+    )
 
 
 def test_changelog_has_unreleased_and_current():
@@ -75,6 +97,8 @@ def test_bump_script_patch():
         assert cp.returncode == 0, cp.stderr
         init = (root / "quantui" / "__init__.py").read_text(encoding="utf-8")
         assert '__version__ = "0.1.1"' in init
+        pyproj = (root / "pyproject.toml").read_text(encoding="utf-8")
+        assert 'version = "0.1.1"' in pyproj
         log = (root / "CHANGELOG.md").read_text(encoding="utf-8")
         assert "## [Unreleased]" in log          # fresh empty section re-created
         assert "## [0.1.0]" in log                # old Unreleased became dated section
@@ -94,17 +118,21 @@ def test_bump_script_minor_and_major():
         assert _run_bump(root, "minor").returncode == 0
         init = (root / "quantui" / "__init__.py").read_text(encoding="utf-8")
         assert '__version__ = "0.2.0"' in init
+        pyproj = (root / "pyproject.toml").read_text(encoding="utf-8")
+        assert 'version = "0.2.0"' in pyproj
 
         root2 = Path(str(td) + "_2")
         _write_fixture(root2, "0.9.9")
         assert _run_bump(root2, "major").returncode == 0
         init2 = (root2 / "quantui" / "__init__.py").read_text(encoding="utf-8")
         assert '__version__ = "1.0.0"' in init2
+        pyproj2 = (root2 / "pyproject.toml").read_text(encoding="utf-8")
+        assert 'version = "1.0.0"' in pyproj2
 
 
 def test_bump_refuses_dirty_tree(tmp_path):
     _write_fixture(tmp_path, "0.1.0")
-    # A stray file outside the two managed files => dirty => refuse.
+    # A stray file outside the three managed files => dirty => refuse.
     # (tmp_path is not a git repo -> the script's non-git fallback must catch it.)
     (tmp_path / "stray.txt").write_text("x", encoding="utf-8")
     cp = _run_bump(tmp_path, "patch")

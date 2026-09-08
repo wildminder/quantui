@@ -3,9 +3,9 @@
 # Usage: scripts/bump_version.py {major|minor|patch} [--root PATH]
 #
 # - Reads __version__ from <root>/quantui/__init__.py
-# - Computes next SemVer, rewrites __version__
+# - Computes next SemVer, rewrites __version__ AND pyproject.toml [project].version
 # - Renames CHANGELOG.md "## [Unreleased]" -> "## [X.Y.Z] - <today>", opens fresh [Unreleased]
-# - Refuses to run when the working tree is dirty (except the two managed files)
+# - Refuses to run when the working tree is dirty (except the three managed files)
 # - Prints suggested git add/commit/tag commands; never runs git itself
 from __future__ import annotations
 
@@ -43,6 +43,18 @@ def _rewrite_init(init_path: Path, new_version: str) -> None:
     init_path.write_text(new_text, encoding="utf-8")
 
 
+PYPROJECT_RE = re.compile(r'^(version = ")\d+\.\d+\.\d+(")', re.M)
+
+
+def _rewrite_pyproject(pyproject_path: Path, new_version: str) -> None:
+    """Keep [project].version in sync (drifted 0.2.1 vs 0.8.0 across v0.4-v0.8)."""
+    text = pyproject_path.read_text(encoding="utf-8")
+    new_text, n = PYPROJECT_RE.subn(rf"\g<1>{new_version}\g<2>", text, count=1)
+    if n != 1:
+        sys.exit("ERROR: cannot find [project] version = in pyproject.toml")
+    pyproject_path.write_text(new_text, encoding="utf-8")
+
+
 def _rotate_changelog(changelog_path: Path, new_version: str) -> None:
     today = datetime.date.today().isoformat()
     text = changelog_path.read_text(encoding="utf-8")
@@ -75,15 +87,16 @@ def main() -> None:
 
     init_path = root / "quantui" / "__init__.py"
     changelog_path = root / "CHANGELOG.md"
-    for p in (init_path, changelog_path):
+    pyproject_path = root / "pyproject.toml"
+    for p in (init_path, changelog_path, pyproject_path):
         if not p.is_file():
             sys.exit(f"ERROR: missing {p}")
 
-    # Dirty-tree guard: only the two managed files may differ from HEAD.
+    # Dirty-tree guard: only the three managed files may differ from HEAD.
     # Untracked cache/build dirs (unsloth_compiled_cache/, *.egg-info/) are
     # handled via .gitignore; the guard below additionally ignores the known
     # generated cache dir so a stale checkout can't block the release flow.
-    _managed = ("quantui/__init__.py", "CHANGELOG.md")
+    _managed = ("quantui/__init__.py", "CHANGELOG.md", "pyproject.toml")
     _generated = ("unsloth_compiled_cache/",)
     try:
         proc = subprocess.run(
@@ -103,7 +116,7 @@ def main() -> None:
         dirty = []  # no git binary at all (rare) -> skip guard
     else:
         # Not a git repository: fall back to a deterministic top-level scan.
-        allowed = {"quantui", "CHANGELOG.md", ".git"}
+        allowed = {"quantui", "CHANGELOG.md", "pyproject.toml", ".git"}
         dirty = [f"?? {e.name}/" if e.is_dir() else f"?? {e.name}"
                  for e in sorted(root.iterdir()) if e.name not in allowed]
     if dirty:
@@ -114,10 +127,11 @@ def main() -> None:
     old = _read_version(init_path)
     new = _next_version(old, args.level)
     _rewrite_init(init_path, new)
+    _rewrite_pyproject(pyproject_path, new)
     _rotate_changelog(changelog_path, new)
     print(f"Bumped {old[0]}.{old[1]}.{old[2]} -> {new}")
     print("Next steps:")
-    print('  git add quantui/__init__.py CHANGELOG.md')
+    print('  git add quantui/__init__.py pyproject.toml CHANGELOG.md')
     print(f'  git commit -m "chore(release): v{new}"')
     print(f'  git tag v{new}')
 
