@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Fixed
+- **Footer has exactly ONE progress bar.** The per-phase rows in the footer
+  are now label-only (`Loading tensors [3/3]`) — they used to render their
+  own mini-bars duplicating the wide aggregate bar's signal. Rows are also
+  half as tall, so the footer is more compact. Clicking a row still opens
+  the log drawer filtered to that phase.
+
 ## [0.9.0] - 2026-09-08
 
 ### Fixed

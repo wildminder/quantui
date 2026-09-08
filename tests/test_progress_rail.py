@@ -19,7 +19,8 @@ def _envelope(phase: str, cur: int, total: int, label: str) -> str:
 
 
 async def test_progress_rail_stacks_determinate_bars(tmp_path, monkeypatch):
-    """Two distinct structured phases -> two stacked rows with bars."""
+    """Two distinct structured phases -> two stacked label rows (label-only:
+    the footer's wide aggregate bar is the ONE progress bar — redundancy fix)."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
@@ -29,10 +30,13 @@ async def test_progress_rail_stacks_determinate_bars(tmp_path, monkeypatch):
         rail = a.query_one("#progress_rail", panels.ProgressRail)
         rows = list(rail.query(".rail_row"))
         assert len(rows) == 2, rows
-        # Each row carries a real (determinate) ProgressBar.
+        # No row carries a ProgressBar anymore (single-bar rule).
         for row in rows:
-            bar = row.query_one(".rail_bar")
-            assert isinstance(bar, __import__("textual").widgets.ProgressBar)
+            assert len(list(row.query("ProgressBar"))) == 0
+        # The labels carry the per-phase counts, not the aggregate.
+        labels = [str(r.query_one(".rail_label").content) for r in rows]
+        assert "[1/3]" in labels[0]
+        assert "[40/4000]" in labels[1]
 
 
 async def test_rail_collapses_nm_headers(tmp_path, monkeypatch):
