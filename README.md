@@ -109,7 +109,7 @@ uses generic tensor-name mapping instead of per-architecture registration, it
 handles models the unsloth backend must reject (TTS models like
 **VibeVoice-1.5B**, or any unknown architecture).
 
-Four methods: `native_q8_0`, `native_q4_0`, `native_f16`, `native_f32`.
+Five methods: `native_q8_0`, `native_q4_0`, `native_f16`, `native_bf16` (lossless for bf16 sources — no f16 inf-overflow risk), `native_f32`.
 
 Behavior (all deterministic, llama.cpp-convention):
 

@@ -21,9 +21,9 @@ def test_readme_has_native_backend_section():
     assert "no transformers" in text.lower() or "without transformers" in text.lower()
 
 
-def test_readme_documents_all_four_native_methods():
+def test_readme_documents_all_five_native_methods():
     text = _readme()
-    for mid in ("native_q8_0", "native_q4_0", "native_f16", "native_f32"):
+    for mid in ("native_q8_0", "native_q4_0", "native_f16", "native_bf16", "native_f32"):
         assert mid in text, mid
 
 
