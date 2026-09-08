@@ -42,6 +42,7 @@ from . import (
     capabilities,  # noqa: F401
     form_state,
     handlers,
+    ids,
     panels,
     profiles_store,
     quant_validator,
@@ -868,9 +869,23 @@ class QuantApp(
 
     # ---- input handlers ------------------------------------------------------
 
+    def _show_run_footer(self) -> None:
+        """Reveal the run footer (plan 2026-09-08-run-footer S2.1).
+
+        Idempotent and safe on partial/headless UI. Called at action_run entry so
+        the footer (rail + status + results card) is visible for the whole run —
+        including the validation-failure early return — and stays visible after
+        completion for the rest of the session.
+        """
+        try:
+            self.query_one(ids.RUN_FOOTER).display = True
+        except NoMatches:
+            pass  # footer not mounted yet (headless partial UI)
+
     @work(thread=True, exclusive=True)
     def action_run(self) -> None:
         self._clear_live_progress()  # start each run with a clean live-progress widget
+        self._show_run_footer()  # layout v2: reveal the run footer for this run
         self._run_start_ts = time.monotonic()  # S1.7: ETA clock starts now
         self.set_status("Validating...")
         cfg = self._read_config()

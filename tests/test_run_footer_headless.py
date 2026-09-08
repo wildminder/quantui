@@ -9,7 +9,7 @@ the success-only results buttons are S2.2 (test_results_card*.py).
 from textual.widgets import Label
 
 from quantui import app as appmod
-from quantui import panels
+from quantui import ids, panels
 from quantui.app_css import MAIN_CSS
 from quantui.widgets_results import ResultsCard
 
@@ -48,3 +48,121 @@ def test_params_full_width_css():
     params_block = MAIN_CSS.split("#params {", 1)[1].split("}", 1)[0]
     assert "width: 100%" in params_block
     assert "border-right" not in params_block
+
+
+# ---- S2.1: visibility lifecycle -----------------------------------------------
+
+
+async def test_footer_hidden_until_run():
+    """Direct seam unit: _show_run_footer() flips display on; idempotent."""
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        footer = a.query_one("#run_footer", panels.RunFooter)
+        assert footer.display is False
+        a._show_run_footer()
+        await pilot.pause()
+        assert footer.display is True
+        # Idempotent: calling again stays visible, no error.
+        a._show_run_footer()
+        await pilot.pause()
+        assert footer.display is True
+
+
+async def test_footer_appears_when_run_pressed(tmp_path, monkeypatch):
+    """Full lifecycle via action_run: footer shows at entry and SURVIVES completion."""
+    from quantui import profiles_store as ps
+    from tests.test_results_card_headless import FakeRunner, _gguf_cfg
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=0)
+
+        a.action_run()
+        # Footer must be visible DURING the run (shown at action_run entry).
+        await pilot.pause()
+        assert a.query_one(ids.RUN_FOOTER, panels.RunFooter).display is True
+
+        from tests.test_app_headless import _wait_until
+
+        await a.workers.wait_for_complete()
+        await _wait_until(lambda: "Done" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        # ...and stays visible after completion.
+        assert a.query_one(ids.RUN_FOOTER, panels.RunFooter).display is True
+
+
+async def test_footer_shows_status_during_validation_failure(tmp_path, monkeypatch):
+    """Early-return path (validation fails) still reveals the footer + status line."""
+    from quantui import profiles_store as ps
+    from quantui import run_config as rc_mod
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        # Empty model path -> run_config.validate fails -> action_run returns early.
+        cfg = rc_mod.RunConfig(
+            gguf=rc_mod.GgufConfig(model="", output=str(tmp_path / "o"),
+                                   method="q4_k_m", pybin="python"),
+        )
+        a._read_config = lambda: cfg
+
+        a.action_run()
+        from tests.test_app_headless import _wait_until
+
+        await _wait_until(
+            lambda: "Validation failed" in str(a.query_one("#status", Label).content),
+            pilot,
+        )
+        assert a.query_one(ids.RUN_FOOTER, panels.RunFooter).display is True
+
+
+async def test_footer_survives_stop(tmp_path, monkeypatch):
+    """User-stop outcome: footer stays up, card shows Stopped.
+
+    Uses the blocking-runner pattern from test_app_headless (FakeRunner that
+    waits on an Event until terminate()): FakeRunner(rc=0) would finish before
+    the stop flag could ever matter."""
+    import threading
+
+    from quantui import profiles_store as ps
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import _gguf_cfg
+
+    class BlockingRunner:
+        def __init__(self) -> None:
+            self._running = False
+            self._ev = threading.Event()
+
+        def run(self, cmd, cwd, observer, progress_debug_fh=None) -> int:
+            self._running = True
+            self._ev.wait()
+            self._running = False
+            return 1  # stopped, not a clean success
+
+        def is_running(self) -> bool:
+            return self._running
+
+        def terminate(self) -> None:
+            self._running = False
+            self._ev.set()
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = BlockingRunner()
+
+        a.action_run()
+        # Wait until the run is actually active, then stop via the real
+        # _terminate_run path (sets _stop_requested + terminates the runner).
+        await _wait_until(lambda: a._run_active is True, pilot)
+        a._terminate_run()
+        await pilot.pause()
+        # The worker thread observes the flag and takes the stop branch.
+        await _wait_until(lambda: "Stopped" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        assert a.query_one(ids.RUN_FOOTER, panels.RunFooter).display is True
