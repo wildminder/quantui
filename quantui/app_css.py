@@ -7,8 +7,13 @@ Single source of truth for the TUI stylesheet. ``quantui.app`` imports
 
 MAIN_CSS = """
     #body { height: 1fr; }
-    #params { width: 70%; height: 1fr; border-right: solid $panel-darken-1; padding: 1 2; }
-    #rail { width: 30%; height: 1fr; padding: 0 1; }
+    #params { width: 100%; height: 1fr; padding: 1 2; }
+    # Run footer (plan 2026-09-08-run-footer): the master style — hidden until a
+    # run starts (QuantApp._show_run_footer flips display on).
+    #run_footer { height: auto; max-height: 16; display: none; padding: 0 1;
+                 border-top: solid $panel-darken-1; background: $surface-darken-1; }
+    #run_footer > #footer_left { width: 1fr; height: auto; padding: 0 1 0 0; }
+    #run_footer > #results_card { width: 50; margin-top: 0; }
     .field { height: auto; }
     .field Input { width: 1fr; }
     .field Button { width: auto; }

@@ -56,6 +56,13 @@ UD_FOOTER = "#ud_footer"
 # free-text #method Input that opens MethodPickerScreen with all 35 ids.
 PICK_METHOD = "#pick_method"
 
+# Run footer (plan 2026-09-08-run-footer, layout v2) -- full-width bottom bar
+# holding the former rail widgets (#progress_rail / #status / #results_card).
+# Hidden until a run starts; RESULT_BUTTONS gates Copy/Open to success only.
+RUN_FOOTER = "#run_footer"
+FOOTER_LEFT = "#footer_left"
+RESULT_BUTTONS = "#result_buttons"
+
 
 def all_ids() -> tuple[str, ...]:
     """Every contract id that must exist in the composed app *right now*.
@@ -88,4 +95,7 @@ def all_ids() -> tuple[str, ...]:
         IMATRIX_AUTO,
         UD_FOOTER,
         PICK_METHOD,
+        RUN_FOOTER,
+        FOOTER_LEFT,
+        RESULT_BUTTONS,
     )

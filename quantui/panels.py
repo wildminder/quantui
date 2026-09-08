@@ -225,43 +225,47 @@ class ProgressRail(Vertical):
             self.post_message(self.BarClicked(target.phase_key))
 
 
-def build_main_layout(run_log_max_lines: int) -> Horizontal:
-    """The main body layout: params-primary split (plan S1.1, 70/30).
+class RunFooter(Horizontal):
+    """Full-width run footer (plan 2026-09-08-run-footer, layout v2).
 
-    Left ``#params`` column (70%) holds the family parameter panels; the right
-    ``#rail`` (30%) holds the stacked ProgressRail (#progress_rail), the status
-    line and the ctq capability badge. Since S1.4 the log lives in
-    :func:`build_log_drawer` (hidden by default). Since S1.8 the single
-    ``#live_progress`` widget is REPLACED by the stacked rail.
-    All widget ids are preserved exactly (contract tests stay green).
+    Holds the former right-rail widgets at the bottom of #body: the stacked
+    ProgressRail (#progress_rail) + status Label (#status) on the left, the
+    ResultsCard on the right. Hidden at startup; QuantApp._show_run_footer()
+    reveals it when a run starts, and it stays visible afterwards. Widget ids
+    are the historical rail ids (contract Q4a) so every handler keeps working
+    unchanged. Master styling lives in MAIN_CSS (#run_footer block) so the
+    app-level stylesheet stays the single source of truth (IMP-001 S3B.1).
     """
-    return Horizontal(
+
+    def compose(self) -> ComposeResult:
+        from .widgets_results import _build_results_card_shared
+
+        with Vertical(id="footer_left"):
+            yield ProgressRail(id="progress_rail")
+            yield Label(id="status")
+        yield _build_results_card_shared()
+
+
+def build_main_layout(run_log_max_lines: int) -> Vertical:
+    """The main body layout (plan 2026-09-08-run-footer, layout v2).
+
+    #params (VerticalScroll) now spans the FULL width; the former right rail's
+    widgets (ProgressRail #progress_rail, status #status, ResultsCard) live in
+    the on-demand :class:`RunFooter` (#run_footer) stacked below it — hidden
+    until a run starts. Since S1.4 the log lives in :func:`build_log_drawer`
+    (hidden by default). All widget ids are preserved exactly (contract tests
+    stay green; the layout-tree pin in test_widget_contract.py was rewritten
+    for v2 in the same commit).
+    """
+    return Vertical(
         VerticalScroll(
             build_gguf_panel(),
             build_comfy_panel(),
             id="params",
         ),
-        Vertical(
-            VerticalScroll(
-                ProgressRail(id="progress_rail"),
-                Label(id="status"),
-                # NOTE: the capability badge (#ctq_cap_warn) intentionally lives in
-                # build_comfy_panel only -- a rail copy here created a duplicate id
-                # (QA Wave-1 finding); handlers.query_one expects exactly one.
-                _build_results_card(),
-            ),
-            id="rail",
-        ),
+        RunFooter(id="run_footer"),
         id="body",
     )
-
-
-def _build_results_card():
-    """Construct the S2.2 ResultsCard (imported lazily to avoid a cycle:
-    widgets_results -> ids only, but keeping the seam here centralizes layout)."""
-    from .widgets_results import ResultsCard
-
-    return ResultsCard()
 
 
 class PtSuggestBox(Horizontal):
