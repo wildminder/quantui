@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Fixed
+- **Run button no longer sticks to the "Advanced" collapsible** — a bottom
+  margin on `Collapsible` restores the breathing room (both family panels).
+
 ### Changed
 - **Layout v2 — run footer replaces the right rail.** The main area is now a
   single full-width parameter column; the stacked progress rail, the status

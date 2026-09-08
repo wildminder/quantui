@@ -24,6 +24,10 @@ MAIN_CSS = """
     .log_follow { height: 1; margin: 0 1 0 0; text-style: none; color: $text-muted; width: auto; }
     Input { margin-bottom: 1; height: 3; }
     Label { margin-top: 1; text-style: bold; }
+    # F2-S1.1 (plan 2026-09-08-footer-v2): the collapsed Advanced section sits
+    # directly above the Run button — Textual's Collapsible has no bottom
+    # margin, so the button visually sticks to it. One line fixes both panels.
+    Collapsible { margin-bottom: 1; }
     #method_info { height: 3; margin-bottom: 1; color: $text-muted; }
     #status { height: 1; background: $panel; }
     RichLog { height: 8; border: round $panel-darken-1; }

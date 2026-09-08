@@ -50,6 +50,14 @@ def test_params_full_width_css():
     assert "border-right" not in params_block
 
 
+def test_collapsible_has_bottom_margin():
+    """F2-S1.1 (plan 2026-09-08-footer-v2): the Advanced Collapsible needs breathing
+    room before the Run button — MAIN_CSS must give every Collapsible a bottom margin."""
+    assert "Collapsible {" in MAIN_CSS
+    block = MAIN_CSS.split("Collapsible {", 1)[1].split("}", 1)[0]
+    assert "margin-bottom: 1" in block
+
+
 # ---- S2.1: visibility lifecycle -----------------------------------------------
 
 
