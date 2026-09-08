@@ -82,3 +82,25 @@ async def test_input_focus_border_changes(tmp_path, monkeypatch):
         assert border_focused != border_blurred, (
             "focus must change the input border (sci-fi power-up)"
         )
+
+
+# ---- S2.3: sci-fi button styling ---------------------------------------------------
+
+
+def test_button_css_sci_fi_pins():
+    """MAIN_CSS gives buttons the sci-fi treatment: bold labels + accent focus."""
+    assert "Button {" in _MAIN_CSS
+    # Bold labels + a focus/hover rule are the two required pins.
+    assert "text-style: bold" in _MAIN_CSS
+    assert "Button:focus" in _MAIN_CSS
+    assert "$accent" in _MAIN_CSS.split("Button:focus")[1].split("}")[0]
+
+
+async def test_run_button_variant_survives(tmp_path, monkeypatch):
+    """The Run button keeps its success variant (the theme only recolors)."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test():
+        btn = a.query_one("#run")
+        assert btn.variant == "success"
+        assert btn.display
