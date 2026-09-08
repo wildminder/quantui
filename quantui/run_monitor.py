@@ -76,8 +76,10 @@ def footer_stats(
 
     Returns:
         ``{"pct": float | None, "eta_s": float | None, "elapsed_s": float,
-        "counts": str}`` — ``counts`` joins the determinate states' single-line
-        texts (``label [cur/total]``) with "; " ("" when none).
+        "counts": str, "rate": str | None}`` — ``counts`` joins the determinate
+        states' single-line texts (``label [cur/total]``) with "; " ("" when
+        none); ``rate`` is the speed token of the LAST determinate state with
+        one (F2-S2.2), e.g. "66.7it/s".
     """
     pct, eta_s = aggregate(states, elapsed_s)
     if pct is None:
@@ -88,9 +90,14 @@ def footer_stats(
         st.text for st in states
         if getattr(st, "determinate", False) and (getattr(st, "text", "") or "").strip()
     )
+    rate = None
+    for st in states:  # last determinate state with a rate wins
+        if getattr(st, "determinate", False) and getattr(st, "rate", None):
+            rate = st.rate
     return {
         "pct": pct,
         "eta_s": eta_s,
         "elapsed_s": float(elapsed_s),
         "counts": counts,
+        "rate": rate,
     }

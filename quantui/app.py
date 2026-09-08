@@ -460,6 +460,8 @@ class QuantApp(
                  f"Elapsed {mm}", f"ETA {eta}"]
         if st["counts"]:
             parts.append(st["counts"])
+        if st.get("rate"):
+            parts.append(st["rate"])  # e.g. "66.7it/s" (F2-S2.2)
         stats_lbl.update(" • ".join(parts))
 
     def on_progress_rail_bar_clicked(self, event) -> None:

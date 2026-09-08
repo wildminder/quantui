@@ -55,6 +55,10 @@ _SEPARATOR_RE = re.compile(r"^\s*[-=_*·─━│]{3,}\s*$")
 _TQDM_BAR_RE = re.compile(r"(?P<pct>\d+|[?])\s*%\s*\|.*?\|")
 _TQDM_COUNTER_RE = re.compile(r"\|\s*(?P<cur>\d+|[?])\s*/\s*(?P<total>\d+|[?])\s*\[")
 _TQDM_RATE_RE = re.compile(r"\b(?:\d+|[?])/(?:\d+|[?])\b[^\n]*?(?:it/s|s/it)")
+# F2-S2.2 (footer-v2): the actual rate token inside the tqdm ETA segment,
+# e.g. "66.7 it/s" or "2.50s/it". "?it/s" (unknown) matches the bracket but
+# not this capture, so rate stays None for unknown-speed bars.
+_TQDM_RATE_VALUE_RE = re.compile(r"(?P<rate>\d+(?:\.\d+)?\s*(?:it/s|s/it))")
 
 
 Category = str  # one of: "progress" | "detail" | "separator" | "line" | "blank"
@@ -145,10 +149,13 @@ def parse_tqdm_progress(msg: str) -> dict | None:
     # Derive pct from cur/total when the bar omitted the leading "N%" token.
     if pct is None and cur is not None and total:
         pct = 100.0 * cur / total
+    # F2-S2.2: the it/s (or s/it) rate token, when the bar knows its speed.
+    mr = _TQDM_RATE_VALUE_RE.search(s)
+    rate = mr.group("rate").replace(" ", "") if mr else None
     # Nothing usable (e.g. unknown-total "?/?") -> fall back to the legacy text path.
     if pct is None and cur is None and total is None:
         return None
-    return {"label": label, "cur": cur, "total": total, "pct": pct}
+    return {"label": label, "cur": cur, "total": total, "pct": pct, "rate": rate}
 
 
 def split_frames(text: str, partial: str) -> tuple[list[tuple[str, str]], str]:

@@ -13,7 +13,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **Footer progress bar + stats line.** While running, the footer shows a
   wide aggregate progress bar (same monotonic-hold math as the header strip,
   with its own hold so plain log lines never reset it) plus a stats line:
-  `65% • Elapsed 02:31 • ETA 01:21 • Optimizing INT8 [2600/4000]`.
+  `65% • Elapsed 02:31 • ETA 01:21 • Optimizing INT8 [2600/4000] • 66.7it/s`
+  (the it/s rate comes from a new tqdm rate capture in the stream parser).
 - **Footer v2 — two-state mode switching.** While a quantization runs, the
   footer shows ONLY the progress panel (wide aggregate bar + stats line +
   per-phase bars + status); when the run finishes, the progress panel is

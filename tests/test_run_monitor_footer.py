@@ -61,3 +61,20 @@ def test_counts_joins_multiple_phases():
 def test_zero_elapsed_never_produces_eta():
     out = footer_stats([_det("a", 50, 100, "A")], elapsed_s=0.0)
     assert out["eta_s"] is None
+
+
+# ---- F2-S2.2: rate passthrough --------------------------------------------------
+
+
+def test_rate_from_primary_determinate_state():
+    st = _det("q", 2000, 4000, "Optimizing INT8")
+    st.rate = "66.7it/s"
+    out = footer_stats([st], 30.0)
+    assert out["rate"] == "66.7it/s"
+
+
+def test_rate_none_when_absent_or_indeterminate():
+    out = footer_stats([_det("a", 1, 2, "A")], 1.0)
+    assert out["rate"] is None
+    out2 = footer_stats([ProgressState(phase="p", label="text only")], 1.0)
+    assert out2["rate"] is None
