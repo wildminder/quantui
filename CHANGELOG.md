@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-08
+
 ### Fixed
 - **Run button no longer sticks to the "Advanced" collapsible** — a bottom
   margin on `Collapsible` restores the breathing room (both family panels).
