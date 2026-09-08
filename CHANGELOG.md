@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ### Changed
 - **The app is now titled "QuantUI"** (was "QuantApp", which leaked from the
   class name into the Header and terminal window title).
+- **New "quantui-cyber" sci-fi theme** — deep-space blue surfaces, electric
+  cyan primary, magenta accent, neon-green success. Registered and set as the
+  app default; all widget colors follow the theme variables.
 
 ### Removed
 - **"List all methods" button.** It was redundant — the "Pick from list"
