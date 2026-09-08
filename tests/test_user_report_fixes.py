@@ -103,19 +103,23 @@ def _make_app():
 
 
 def test_header_progress_holds_value_across_log_line_clears():
+    """USER REPORT (S1.7): progress must HOLD across log-line clears — the
+    behavior migrated from the removed header strip to #footer_bar (own hold)."""
     async def main():
         a = _make_app()
         async with a.run_test() as pilot:
             await pilot.pause()
             from textual.widgets import ProgressBar
 
-            bar = a.query_one("#header_progress", ProgressBar)
+            a._show_run_footer()  # footer must be visible for the bar to exist
+            await pilot.pause()
+            bar = a.query_one("#footer_bar", ProgressBar)
             # A structured progress frame sets 40%.
             a._live.update('CTQ_PROGRESS {"phase":"quantize","cur":40,"total":100}')
             a.update_progress(a._live.states())
             await pilot.pause()
             assert bar.progress == 40
-            # A real log line clears the live store -> header must HOLD 40, not reset.
+            # A real log line clears the live store -> footer must HOLD 40, not reset.
             a._live.clear()
             a.update_progress(a._live.states())
             await pilot.pause()
@@ -125,8 +129,8 @@ def test_header_progress_holds_value_across_log_line_clears():
             a.update_progress(a._live.states())
             await pilot.pause()
             assert bar.progress == 40
-            # Run finishes -> cleared back to idle 0.
-            a._clear_header_strip()
+            # New run boundary -> reset to 0 for the next run.
+            a._show_run_footer()
             await pilot.pause()
             assert bar.progress == 0
 
