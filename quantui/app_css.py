@@ -29,6 +29,12 @@ MAIN_CSS = """
     .log_follow { height: 1; margin: 0 1 0 0; text-style: none; color: $text-muted; width: auto; }
     Input { margin-bottom: 1; height: 3; }
     Label { margin-top: 1; text-style: bold; }
+    # Sci-fi inputs (plan 2026-09-08-scifi-ui S2.2): electric-cyan frame from
+    # the theme's primary; focusing "powers up" the border to the accent hue.
+    # The -invalid state stays error-red so validation remains unambiguous.
+    Input { border: round $primary; background: $surface; }
+    Input:focus { border: round $accent; text-style: bold; }
+    Input.-invalid { border: round $error; }
     # F2-S1.1 (plan 2026-09-08-footer-v2): the collapsed Advanced section sits
     # directly above the Run button — Textual's Collapsible has no bottom
     # margin, so the button visually sticks to it. One line fixes both panels.
