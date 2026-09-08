@@ -326,3 +326,73 @@ async def test_log_drawer_still_toggles():
         a.action_toggle_log()
         await pilot.pause()
         assert drawer.display is False
+
+
+# ---- F2-S3.1: mode-invariant pins -----------------------------------------------
+
+
+async def test_mode_invariant_never_both(tmp_path, monkeypatch):
+    """Walk the full lifecycle; after EVERY transition, progress panel and done
+    card must never both be visible (the duplication the user reported)."""
+    from quantui import profiles_store as ps
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import FakeRunner, _gguf_cfg
+
+    def _invariant(a, step):
+        left = a.query_one("#footer_left").display
+        card = a.query_one(ResultsCard).display
+        assert not (left and card), (
+            f"both footer sides visible after: {step}"
+        )
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=0)
+
+        # 1) run starts -> progress mode
+        a.action_run()
+        await pilot.pause()
+        _invariant(a, "run start")
+        # 2) completion -> done mode
+        await a.workers.wait_for_complete()
+        await _wait_until(lambda: "Done" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        _invariant(a, "success done")
+        # 3) new run -> back to progress
+        a.action_run()
+        await pilot.pause()
+        _invariant(a, "second run start")
+        # 4) second completion -> done mode again (outcome text is identical to
+        # the first run's, so wait on the MODE, not the label content).
+        await a.workers.wait_for_complete()
+        await _wait_until(
+            lambda: a.query_one("#footer_left").display is False, pilot)
+        _invariant(a, "second run done")
+        # In done mode, the left side must actually be hidden (not just XOR by luck).
+        assert a.query_one("#footer_left").display is False
+        assert a.query_one(ResultsCard).display is True
+
+
+async def test_buttons_only_in_done_mode(tmp_path, monkeypatch):
+    """#result_buttons visible implies #footer_left hidden (S2.2 gating x mode machine)."""
+    from quantui import profiles_store as ps
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import FakeRunner, _gguf_cfg
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=0)
+
+        a.action_run()
+        await a.workers.wait_for_complete()
+        await _wait_until(lambda: "Done" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        btns = a.query_one("#result_buttons")
+        if btns.display:  # success record -> buttons visible in done mode
+            assert a.query_one("#footer_left").display is False
