@@ -57,6 +57,12 @@ def test_plan_int_verbatim():
         assert item.action == "verbatim", dtype
 
 
+def test_plan_bf16_method_pass():
+    item = plan_tensor("model.layers.0.self_attn.q_proj.weight", "BF16", (64, 64), "native_bf16")
+    assert item.action == "pass_bf16"
+    assert item.reason == "bf16 method"
+
+
 def test_plan_f16_method_no_demotion_needed():
     """f16 method with non-divisible ne0 is just a pass (no fake warning)."""
     item = plan_tensor("model.layers.0.conv.conv.weight", "F32", (8, 10), "native_f16")

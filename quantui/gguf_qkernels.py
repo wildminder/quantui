@@ -145,7 +145,9 @@ from dataclasses import dataclass  # noqa: E402  (grouped with the plan section)
 _FLOAT_DTYPES = frozenset({"F32", "F16", "BF16"})
 _INT_DTYPES = frozenset({"I32", "U8", "BOOL"})
 
-NATIVE_METHODS: tuple[str, ...] = ("native_q8_0", "native_q4_0", "native_f16", "native_f32")
+NATIVE_METHODS: tuple[str, ...] = (
+    "native_q8_0", "native_q4_0", "native_f16", "native_bf16", "native_f32",
+)
 
 # llama.cpp convention: the token-embedding table is NOT quantized with the
 # method — it stays F16 (quantui-rs does the same; verified against the
@@ -194,6 +196,8 @@ def plan_tensor(name: str, dtype: str, shape: tuple[int, ...], method: str) -> T
         if gguf_name in _PASSTHROUGH_F16_NAMES:
             return TensorPlanItem(name, gguf_name, tuple(shape), "pass_f16",
                                   "token embedding stays F16 (llama.cpp convention)")
+        if method == "native_bf16":
+            return TensorPlanItem(name, gguf_name, tuple(shape), "pass_bf16", "bf16 method")
         if method == "native_q8_0":
             if ne0 % 32 == 0:
                 return TensorPlanItem(name, gguf_name, tuple(shape), "quant_q8_0", f"q8_0 (ne0={ne0})")

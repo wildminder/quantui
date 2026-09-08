@@ -300,7 +300,7 @@ def test_needs_imatrix_is_kwarg():
 def test_methods_ids_match_official_surface():
     # save.py exposes 24 ALLOWED_QUANTS + 11 IMATRIX_QUANTS = 35, plus the 4
     # native-backend ids appended after the official surface (S4.1).
-    assert len(METHODS) == 35 + 4
+    assert len(METHODS) == 35 + 5
     assert {m.id for m in METHODS} == (
         set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) | set(NATIVE_QUANT_IDS)
     )
@@ -337,7 +337,7 @@ def test_native_methods_registered():
     """Exactly 4 native ids, all GGUF family, none needs an imatrix."""
     natives = [m for m in METHODS if m.backend == Backend.NATIVE]
     assert [m.id for m in natives] == list(NATIVE_QUANT_IDS) == [
-        "native_q8_0", "native_q4_0", "native_f16", "native_f32",
+        "native_q8_0", "native_q4_0", "native_f16", "native_bf16", "native_f32",
     ]
     assert all(m.family == Family.GGUF for m in natives)
     assert all(m.needs_imatrix is False for m in natives)
@@ -353,7 +353,7 @@ def test_native_methods_last():
     """UI stability: the 4 native ids come after the official 35."""
     official = set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS)
     ids = [m.id for m in METHODS]
-    first_native = ids.index("native_q8_0")
+    first_native = ids.index("native_q8_0")  # 40 - 5 = 35 official before  # 40 - 5 = 35 official before
     assert all(m.backend == Backend.NATIVE for m in METHODS[first_native:])
     assert {m.id for m in METHODS[:first_native]} == official
 

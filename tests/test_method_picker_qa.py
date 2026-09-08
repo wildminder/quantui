@@ -84,7 +84,7 @@ async def test_all_official_ids_present_as_option_values():
         values = {sl.get_option_at_index(i).value for i in range(sl.option_count)}
         assert set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) <= values
         assert values == set(ALLOWED_QUANT_IDS) | set(IMATRIX_QUANT_IDS) | set(NATIVE_QUANT_IDS)
-        assert sl.option_count == len(METHODS) == 39
+        assert sl.option_count == len(METHODS) == 40
 
 
 async def test_hand_typed_typo_still_caught_by_validation():

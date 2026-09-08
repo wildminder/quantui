@@ -36,9 +36,11 @@ _DT: dict[str, tuple[int, bool]] = {
 }
 
 # method id -> general.file_type id (llama.cpp FTYPE convention)
-_FILE_TYPE = {"native_q8_0": 7, "native_q4_0": 2, "native_f16": 1, "native_f32": 0}
+_FILE_TYPE = {"native_q8_0": 7, "native_q4_0": 2, "native_f16": 1,
+              "native_bf16": 1, "native_f32": 0}
 # method id -> GGML qtype id for tensor-type reporting
-_QTYPE_ID = {"native_q8_0": 8, "native_q4_0": 2, "native_f16": 1, "native_f32": 0}
+_QTYPE_ID = {"native_q8_0": 8, "native_q4_0": 2, "native_f16": 1,
+             "native_bf16": 30, "native_f32": 0}
 
 
 class GgufExportError(ValueError):
@@ -155,6 +157,25 @@ def _to_f32(dtype: str, shape: tuple, raw: bytes) -> object:  # np.ndarray
     raise GgufExportError(f"unsupported float dtype {dtype}")
 
 
+def _to_bf16(dtype: str, shape: tuple, raw: bytes) -> tuple:
+    """Convert a float payload to a bf16 bit-pattern uint16 array.
+
+    BF16 source: verbatim (lossless). F32 source: RTNE round-to-nearest via
+    the shared bit-math core (round-to-odd increment for ties-to-even).
+    """
+    import numpy as np
+
+    from quantui.dtype_cast import f32_to_bf16
+
+    n = 1
+    for dim in shape:
+        n *= dim
+    if dtype == "BF16":
+        return np.frombuffer(raw, dtype="<u2", count=n).reshape(shape).copy()
+    f32 = _to_f32(dtype, shape, raw)
+    return f32_to_bf16(f32).reshape(shape).astype(np.uint16)
+
+
 def _convert_int_verbatim(dtype: str, shape: tuple, raw: bytes) -> tuple:
     """Integer payloads kept verbatim; return (gguf_type_id, ndarray).
 
@@ -255,6 +276,13 @@ def export_gguf(model_path: str, out_path: str, method: str, progress=None) -> G
             report.tensors_quantized += 1
             qt = "Q8_0" if item.action == "quant_q8_0" else "Q4_0"
             report.qtype_histogram[qt] = report.qtype_histogram.get(qt, 0) + 1
+        elif item.action == "pass_bf16":
+            bits = _to_bf16(dtype, shape, raw)
+            writer.add_tensor(
+                item.gguf_name or item.hf_name, bits,
+                raw_dtype=gguf.GGMLQuantizationType.BF16,
+            )
+            report.qtype_histogram["BF16"] = report.qtype_histogram.get("BF16", 0) + 1
         elif item.action == "pass_f16":
             arr = _to_f32(dtype, shape, raw).astype(np.float16)
             writer.add_tensor(item.gguf_name or item.hf_name, arr)
