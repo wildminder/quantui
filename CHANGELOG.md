@@ -10,6 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   margin on `Collapsible` restores the breathing room (both family panels).
 
 ### Changed
+- **Footer v2 — two-state mode switching.** While a quantization runs, the
+  footer shows ONLY the progress panel (wide aggregate bar + stats line +
+  per-phase bars + status); when the run finishes, the progress panel is
+  replaced by the results card (path + buttons) stretched to full width —
+  the verdict now appears exactly once instead of on both sides.
 - **Layout v2 — run footer replaces the right rail.** The main area is now a
   single full-width parameter column; the stacked progress rail, the status
   line and the results card moved into a `#run_footer` bar at the bottom that

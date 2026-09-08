@@ -15,24 +15,68 @@ from quantui.widgets_results import ResultsCard
 
 
 async def test_footer_holds_rail_status_results():
-    """Composition: #run_footer wraps the historical rail ids + the results card.
+    """Composition (F2-S1.2): footer has BOTH panels but shows only one at a time.
 
-    Left column #footer_left holds #progress_rail (ProgressRail) + #status (Label);
-    ResultsCard is a direct child of the footer (right side)."""
+    Progress mode (default): #footer_left visible (rail + bar + stats + status),
+    ResultsCard hidden. Done mode: card visible (full width), left hidden."""
     from textual.containers import Vertical
 
+    import quantui.profiles_store as ps
+
     a = appmod.QuantApp()
-    async with a.run_test():
+    async with a.run_test() as pilot:
         footer = a.query_one("#run_footer", panels.RunFooter)
         rail = footer.query_one("#progress_rail", panels.ProgressRail)
         assert isinstance(rail, panels.ProgressRail)
-        status = footer.query_one("#status", Label)
-        assert isinstance(status, Label)
+        assert isinstance(footer.query_one("#status", Label), Label)
+        # F2-S1.2: the new wide aggregate bar + stats line live in the left panel.
         left = footer.query_one("#footer_left", Vertical)
         assert left.query_one("#progress_rail") is not None
         assert left.query_one("#status") is not None
+        from textual.widgets import ProgressBar
+
+        bar = footer.query_one("#footer_bar", ProgressBar)
+        assert bar.display is True
+        assert footer.query_one("#footer_stats", Label) is not None
         card = footer.query_one(ResultsCard)
         assert isinstance(card, ResultsCard)
+
+        # Default mode: progress only.
+        assert footer._mode == "progress"
+        assert left.display is True
+        assert card.display is False
+
+        # Done mode (record lands): card swaps in, progress panel out.
+        rec = ps.RunRecord(
+            ts="t", family="gguf", method="q4_k_m", output="/o/out.gguf",
+            status="success", exit_code=0, duration_s=1.0,
+        )
+        card.show_record(rec)
+        footer.set_mode("done")
+        await pilot.pause()
+        assert footer._mode == "done"
+        assert left.display is False
+        assert card.display is True
+        assert footer.has_class("mode-done")
+        # Buttons live on the card and are visible in done mode after success.
+        assert card.query_one("#result_buttons").display is True
+
+        # Back to progress for a new run.
+        footer.set_mode("progress")
+        await pilot.pause()
+        assert left.display is True
+        assert card.display is False
+        assert not footer.has_class("mode-done")
+
+
+def test_set_mode_rejects_unknown():
+    """set_mode only accepts the two defined modes."""
+    import pytest
+
+    # No app boot needed: the API is a plain method; use an uncomposed instance.
+    footer = panels.RunFooter(id="run_footer")
+    with pytest.raises(ValueError):
+        footer.set_mode("bogus")
 
 
 def test_params_full_width_css():
@@ -48,6 +92,12 @@ def test_params_full_width_css():
     params_block = MAIN_CSS.split("#params {", 1)[1].split("}", 1)[0]
     assert "width: 100%" in params_block
     assert "border-right" not in params_block
+
+    # F2-S1.2: done mode stretches the card; footer bar spans the left panel.
+    assert ".mode-done > #results_card {" in MAIN_CSS
+    assert "width: 100%" in MAIN_CSS.split(".mode-done > #results_card {", 1)[1].split("}", 1)[0]
+    assert "#footer_bar {" in MAIN_CSS
+    assert "#footer_stats {" in MAIN_CSS
 
 
 def test_collapsible_has_bottom_margin():
