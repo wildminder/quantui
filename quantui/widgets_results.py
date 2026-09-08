@@ -50,6 +50,14 @@ def report_to_issues(report) -> list[Issue]:
     return issues
 
 
+def _build_results_card_shared():
+    """Shared construction seam for the ResultsCard (plan 2026-09-08-run-footer).
+
+    Lazy import inside :mod:`quantui.panels` historically avoided a cycle; the
+    footer now needs the same seam, so it lives here next to the widget."""
+    return ResultsCard()
+
+
 class ResultsCard(Vertical):
     """Run-outcome summary card (plan S2.2)."""
 
@@ -81,6 +89,7 @@ class ResultsCard(Vertical):
         yield Horizontal(
             Button("Copy path", id=ids.COPY_OUT_PATH.lstrip("#"), variant="default"),
             Button("Open folder", id=ids.OPEN_OUT_FOLDER.lstrip("#"), variant="default"),
+            id=ids.RESULT_BUTTONS.lstrip("#"),
             classes="log_buttons",
         )
 

@@ -60,19 +60,35 @@ async def test_family_radios_present():
         assert [r.id for r in radios] == ["fam_gguf", "fam_comfy"]
 
 
-async def test_rail_exists_and_params_primary():
-    """S1.1: params-primary split -- a right #rail exists and #log is still queryable."""
+async def test_body_tree_params_plus_footer():
+    """Layout v2 (plan 2026-09-08-run-footer): full-width #params + on-demand #run_footer.
+
+    The old right-hand #rail column is GONE; the rail widgets live inside the
+    footer now (composition pinned in test_run_footer_headless.py)."""
     from textual.containers import Vertical, VerticalScroll
+    from textual.css.query import NoMatches
+
+    from quantui import panels
 
     a = appmod.QuantApp()
     async with a.run_test():
-        rail = a.query_one("#rail")
-        assert isinstance(rail, Vertical)
+        body = a.query_one("#body")
+        assert isinstance(body, Vertical)
+        # params is the primary surface; the footer stacks BELOW it.
+        body_children = [c.id for c in body.children]
+        assert body_children == ["params", "run_footer"]
         params = a.query_one("#params")
         assert isinstance(params, VerticalScroll)
-        # params is the primary (left) column: rail comes after it in the DOM order.
-        body_children = [c.id for c in a.query_one("#body").children]
-        assert body_children == ["params", "rail"]
+        footer = a.query_one("#run_footer")
+        assert isinstance(footer, panels.RunFooter)
+        # Hidden until the first run (plan: footer appears on Run Quantization).
+        assert footer.display is False
+        # The old rail column must not exist anywhere.
+        try:
+            a.query_one("#rail")
+            raise AssertionError("#rail still mounted; layout v2 requires it gone")
+        except NoMatches:
+            pass
         assert a.query_one(ids.LOG) is not None
 
 
