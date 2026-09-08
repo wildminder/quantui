@@ -29,10 +29,8 @@ from textual.widgets import (
 
 from . import capabilities, run_config, screens
 from .quant_methods import (
-    METHODS,
     Family,
     comfy_format,
-    list_line,
 )
 
 # --- project constants (NTH-001: single home in run_config; re-exported here
@@ -354,8 +352,6 @@ class HandlersMixin:
                 self.action_stop_run()
             else:
                 self.action_run()
-        elif b == "listm":
-            self.list_methods()
         elif b == "pt_convert_btn":
             self.action_convert_pt()
         elif b == "copy_log":
@@ -681,11 +677,9 @@ class HandlersMixin:
             out_widget.value = candidate
             self._ctq_output_owned_value = candidate
 
-    def list_methods(self) -> None:
-        self.log_msg("=== Available quantization methods ===")
-        for m in METHODS:
-            self.log_msg(list_line(m))
-        self.log_msg("======================================")
+    # The old methods-dump handler was removed (plan 2026-09-08-scifi-ui
+    # S1.2): its button is gone; the method picker modal lists all methods
+    # interactively (see the removal tripwire test file).
 
     # ---- capability badge (non-blocking) -------------------------------------
 

@@ -368,7 +368,9 @@ def build_gguf_panel() -> VerticalScroll:
             collapsed=True,
         ),
         Button("Run Quantization", id="run", variant="success"),
-        Button("List all methods", id="listm", variant="default"),
+        # The old methods-dump button was removed (plan 2026-09-08-scifi-ui
+        # S1.2): redundant — the "Pick from list" modal lists all 35 official
+        # methods interactively (see the removal tripwire test file).
         id="gguf_panel",
     )
 

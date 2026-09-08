@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **The app is now titled "QuantUI"** (was "QuantApp", which leaked from the
   class name into the Header and terminal window title).
 
+### Removed
+- **"List all methods" button.** It was redundant — the "Pick from list"
+  modal already lists all 35 official methods interactively (also reachable
+  from the command palette).
+
 ## [0.9.2] - 2026-09-08
 
 ### Removed
