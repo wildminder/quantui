@@ -59,7 +59,13 @@ def _build_results_card_shared():
 
 
 class ResultsCard(Vertical):
-    """Run-outcome summary card (plan S2.2)."""
+    """Run-outcome summary card (plan S2.2).
+
+    Since the 2026-09-08-run-footer plan the card lives in the run footer and
+    its ``[Copy path] / [Open folder]`` button row (``#result_buttons``) is
+    revealed ONLY when the displayed record's status is ``success`` — hidden
+    while idle, running, failed or stopped (user request 2026-09-08).
+    """
 
     DEFAULT_CSS = """
     ResultsCard { height: auto; margin-top: 1; padding: 0 1;
@@ -124,8 +130,22 @@ class ResultsCard(Vertical):
         bits.append(f"exit {getattr(record, 'exit_code', '?')}")
         bits.append(str(getattr(record, "ts", "")))
         meta_lbl.update(" | ".join(bits))
+        # S2.2 (plan 2026-09-08-run-footer): [Copy path]/[Open folder] appear
+        # ONLY on a successful quantization (user request 2026-09-08).
+        try:
+            self.query_one(f"#{ids.RESULT_BUTTONS.lstrip('#')}").display = (
+                status == "success"
+            )
+        except NoMatches:
+            pass  # not composed yet
 
     def on_mount(self) -> None:
+        # S2.2 (plan 2026-09-08-run-footer): the Copy/Open button row is hidden
+        # until a SUCCESSFUL record lands (show_record gates it).
+        try:
+            self.query_one(f"#{ids.RESULT_BUTTONS.lstrip('#')}").display = False
+        except NoMatches:
+            pass  # not composed yet
         pending = getattr(self, "_pending_record", None)
         if pending is not None:
             self.show_record(pending)

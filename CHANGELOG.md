@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   profiles keep working unchanged.) The footer shows for the whole run —
   including the validation-failure early return — and through success,
   failure and user-stop outcomes.
+- **[Copy path] / [Open folder] reveal only on success.** The results-card
+  button row (`#result_buttons`) is hidden while idle/running/failed/stopped
+  and appears exactly when a finished run has `status == "success"`.
 
 ## [0.8.0] - 2026-09-08
 
