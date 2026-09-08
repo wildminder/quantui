@@ -50,7 +50,6 @@ MAIN_CSS = """
     #log_drawer > .log_buttons { dock: bottom; height: auto; }
     .field_hint_visible { height: 1; margin-top: 0; text-style: none; color: $error; }
     Input.-invalid { border: tall ansi_red; }
-    #header_strip { height: 1; background: $panel; }
-    #header_strip > ProgressBar { width: 1fr; }
-    #header_strip > Label { margin-top: 0; text-style: none; color: $text-muted; width: auto; padding: 0 1; }
+    # S1.7 header strip rules removed (post-v0.9.1 dedup): the run footer is
+    # the single progress surface.
     """

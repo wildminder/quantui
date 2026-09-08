@@ -22,14 +22,12 @@ import time
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal
 from textual.css.query import NoMatches
 from textual.widgets import (
     Button,
     Footer,
     Header,
     Label,
-    ProgressBar,
     RadioButton,
     RadioSet,
     RichLog,
@@ -236,25 +234,19 @@ class QuantApp(
         self._last_run_duration: float = 0.0
         self._last_record = None
         self._profiles_store = None
-        # Header progress stickiness (S1.7 user fix), extracted to a pure class
-        # (IMP-001 S3B.3): the displayed % never dips within one run; reset at
-        # run boundaries only (see _clear_header_strip).
-        self._progress_hold = HeaderProgressHold()
-        # F2-S2.1 (footer-v2): the footer aggregate bar has its OWN hold — the
-        # header hold is reset by clear_live() on plain log lines, the footer
-        # bar must stay monotonic within a run (reset only in _show_run_footer).
+        # F2-S2.1 (footer-v2): the footer aggregate bar has its OWN hold —
+        # clear_live() fires on plain log lines, the footer bar must stay
+        # monotonic within a run (reset only in _show_run_footer). The old
+        # header hold died with the S1.7 header strip (post-v0.9.1 dedup).
         self._footer_hold = HeaderProgressHold()
 
     # ---- composition ---------------------------------------------------------
 
     def compose(self) -> ComposeResult:
         yield Header()
-        # Global run-monitor strip (S1.7): determinate aggregate bar + ETA.
-        yield Horizontal(
-            ProgressBar(id="header_progress", show_percentage=False),
-            Label("--", id="eta_label"),
-            id="header_strip",
-        )
+        # S1.7 header strip REMOVED (post-v0.9.1 dedup): the run footer's wide
+        # aggregate bar + stats line show the same pct/ETA with more detail;
+        # the strip duplicated them during runs and showed "0% / --" at idle.
         yield RadioSet(
             RadioButton("Unsloth GGUF", value=True, id="fam_gguf"),
             RadioButton("ComfyUI / convert_to_quant", id="fam_comfy"),
@@ -415,7 +407,6 @@ class QuantApp(
             self.query_one("#progress_rail", panels.ProgressRail).set_states(states)
         except NoMatches:
             pass  # rail not mounted yet
-        self._render_header_strip(states)
         self._render_footer_bar(states)
 
     def _render_footer_bar(self, states: list) -> None:
@@ -487,68 +478,19 @@ class QuantApp(
         except NoMatches:
             pass  # drawer RichLog not mounted
 
-    def _render_header_strip(self, states: list) -> None:
-        """Global header progress + ETA (S1.7): aggregate of determinate states.
-
-        User-report fix: the bar must NOT reset to 0 every time a real log line
-        clears the live-progress store mid-run. The pure
-        :class:`HeaderProgressHold` keeps the last known fraction and it is only
-        reset when the run actually finishes (:meth:`_clear_header_strip`), so
-        the bar is monotonic within one run.
-        """
-        try:
-            bar = self.query_one("#header_progress", ProgressBar)
-            eta_lbl = self.query_one("#eta_label", Label)
-        except NoMatches:
-            return  # header strip not mounted yet
-        elapsed = 0.0
-        if self._run_start_ts > 0:
-            elapsed = time.monotonic() - self._run_start_ts
-        pct, eta_s = run_monitor.aggregate(states, elapsed)
-        if pct is None:
-            # No determinate signal right now: hold the last value instead of 0.
-            held = self._progress_hold.held()
-            if held is None:
-                bar.update(total=100, progress=0)
-                eta_lbl.update("--")
-                return
-            eta_s = None
-            pct = held
-        else:
-            pct = self._progress_hold.next(pct)
-        bar.update(total=100, progress=pct)
-        eta_lbl.update(run_monitor.format_eta(eta_s))
-
-    def _clear_header_strip(self) -> None:
-        """Reset the header strip to idle (run finished / new run starting).
-
-        F2-S2.1: the footer aggregate bar + stats line reset with it (same run
-        boundary), so a NEW run starts from 0 again.
-        """
-        self._progress_hold.reset()
-        try:
-            bar = self.query_one("#header_progress", ProgressBar)
-            eta_lbl = self.query_one("#eta_label", Label)
-            bar.update(total=100, progress=0)
-            eta_lbl.update("--")
-        except NoMatches:
-            pass  # header strip not mounted yet
-        # F2-S2.1: the FOOTER bar/stats reset only at run boundaries
-        # (_show_run_footer), NOT here — mid-run plain lines must not clear it.
-
     def clear_live(self) -> None:
         """Blank the progress rail (keep it mounted so the layout doesn't jump).
 
         F2-S2.1: the FOOTER bar is NOT touched here — a plain log line clears
         the live store mid-run, but the footer aggregate must hold its value
         (its own hold, ``_footer_hold``, resets only at run boundaries). The
-        header strip keeps its historic reset-on-clear behavior.
+        S1.7 header strip is gone (post-v0.9.1 dedup): the footer is the
+        single progress surface.
         """
         try:
             self.query_one("#progress_rail", panels.ProgressRail).set_states([])
         except NoMatches:
             pass  # rail not mounted yet
-        self._clear_header_strip()
 
     # --- LogObserver (subject callback; marshals to the main thread) ------------
     def on_segment(self, seg: "stream_parser.StreamSegment") -> None:
@@ -644,7 +586,6 @@ class QuantApp(
         """
         self._run_active = False
         self._run_start_ts = 0.0  # stop the ETA clock
-        self._clear_header_strip()
         for wid in ("#run", "#run_ctq"):
             try:
                 btn = self.query_one(wid, Button)
@@ -938,8 +879,16 @@ class QuantApp(
             footer.set_mode("progress")
         except NoMatches:
             pass  # footer not mounted yet (headless partial UI)
-        # Run boundary: the footer bar restarts from 0 for the new run.
+        # Run boundary: the footer bar restarts from 0 for the new run (hold
+        # reset AND the widget itself — a previous run's fill must not linger).
         self._footer_hold.reset()
+        try:
+            from textual.widgets import ProgressBar as _PB
+
+            self.query_one("#footer_bar", _PB).update(total=100, progress=0)
+            self.query_one("#footer_stats", Label).update("--")
+        except NoMatches:
+            pass  # footer not mounted yet
 
     @work(thread=True, exclusive=True)
     def action_run(self) -> None:

@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Removed
+- **The top header progress strip.** It duplicated the footer's aggregate
+  bar + ETA during runs (both showed the same pct at the same moment) and
+  showed useless "0% / --" when idle. The run footer — wide bar + stats
+  line (pct / elapsed / ETA / counts / rate) + phase chips — is now the
+  single progress surface. The monotonic-hold behavior survives in the
+  footer's own hold; the pure `HeaderProgressHold` class is retained.
+
 ## [0.9.1] - 2026-09-08
 
 ### Fixed
