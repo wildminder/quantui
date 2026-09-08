@@ -25,13 +25,18 @@ from .stream_parser import ProgressClassifier, parse_ctq_progress, parse_tqdm_pr
 
 @dataclass
 class ProgressState:
-    """One collapsed progress slot: either a structured (determinate) step or plain text."""
+    """One collapsed progress slot: either a structured (determinate) step or plain text.
+
+    ``rate`` (F2-S2.2, footer-v2) carries the tqdm speed token (e.g. "66.7it/s")
+    when the bar reported one; ``None`` otherwise. Consumed by the footer stats line.
+    """
 
     phase: str
     cur: int | None = None
     total: int | None = None
     pct: float | None = None
     label: str = ""
+    rate: str | None = None
 
     @property
     def determinate(self) -> bool:
@@ -69,6 +74,7 @@ class ProgressState:
             total=_int(d.get("total")),
             pct=_float(d.get("pct")),
             label=str(d.get("label", "")),
+            rate=str(d["rate"]) if d.get("rate") is not None else None,
         )
 
 
@@ -98,6 +104,7 @@ class LiveProgressStore:
                 total=td["total"],
                 pct=td["pct"],
                 label=td["label"] or "Quantizing",
+                rate=td.get("rate"),
             )
             self._states["quantize"] = st
             return

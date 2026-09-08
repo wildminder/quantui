@@ -5,6 +5,7 @@ Mirrors the assertions that previously lived inside test_app_headless.py so the
 extraction is provably behavior-preserving.
 """
 from quantui import stream_parser as sp
+from quantui.live_progress import ProgressState
 
 
 def test_split_frames_carriage_return_is_progress():
@@ -134,6 +135,43 @@ def test_parse_tqdm_progress_rejects_ctq_header_and_epoch():
     # ctq "(N/M) Processing" headers and "Epoch 3/10" log lines are NOT tqdm bars.
     assert sp.parse_tqdm_progress("(1/211) Processing (INT8): a.weight") is None
     assert sp.parse_tqdm_progress("Epoch 3/10 loss=0.1") is None
+
+
+# ---- F2-S2.2 (plan 2026-09-08-footer-v2): it/s rate capture --------------------
+
+
+def test_parse_tqdm_progress_extracts_rate():
+    """A real tqdm ETA segment carries the it/s rate -> surfaced as ``rate``.
+
+    The rate is normalized to the compact form (whitespace stripped) so the
+    stats line renders e.g. "66.7it/s" without double spaces."""
+    line = "Optimizing INT8:  50%|#####| 2000/4000 [00:30<00:30,  66.7 it/s]"
+    d = sp.parse_tqdm_progress(line)
+    assert d is not None
+    assert d["cur"] == 2000 and d["total"] == 4000
+    assert d["rate"] == "66.7it/s"
+
+
+def test_parse_tqdm_progress_rate_s_per_it():
+    """Slow bars report s/it — captured verbatim."""
+    d = sp.parse_tqdm_progress("Optimizing:  10%|# | 400/4000 [00:10<01:30,  2.50s/it]")
+    assert d is not None
+    assert d["rate"] == "2.50s/it"
+
+
+def test_parse_tqdm_progress_unknown_rate_is_none():
+    """'<?, ?it/s>' bars carry no rate -> key present, value None."""
+    d = sp.parse_tqdm_progress("Optimizing INT8:  50%|#####| 2000/4000 [00:01<?, ?it/s]")
+    assert d is not None
+    assert d["rate"] is None
+
+
+def test_progress_state_rate_roundtrip():
+    """from_dict coerces the optional rate into the ProgressState field."""
+    st = ProgressState.from_dict({"phase": "q", "label": "L", "rate": "66.7 it/s"})
+    assert st.rate == "66.7 it/s"
+    st2 = ProgressState.from_dict({"phase": "q", "label": "L"})
+    assert st2.rate is None
 
 
 def test_parse_tqdm_progress_rejects_unknown_total():
