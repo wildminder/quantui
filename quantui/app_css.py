@@ -60,7 +60,9 @@ MAIN_CSS = """
     #log_drawer > #log { height: 1fr; border: none; }
     #log_drawer > .log_buttons { dock: bottom; height: auto; }
     .field_hint_visible { height: 1; margin-top: 0; text-style: none; color: $error; }
-    Input.-invalid { border: tall ansi_red; }
+    # The legacy tall ansi_red invalid rule was consolidated into the S2.2
+    # sci-fi rule above (Input.-invalid -> round $error) when the cyber theme
+    # landed: one invalid style, themed color.
     # S1.7 header strip rules removed (post-v0.9.1 dedup): the run footer is
     # the single progress surface.
     """

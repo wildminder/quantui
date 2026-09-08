@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- Consolidated the invalid-input border into the themed sci-fi rule
+  (`round $error` everywhere — the old `tall ansi_red` leftover is gone).
+
 ## [0.10.0] - 2026-09-09
 
 ### Changed
