@@ -43,6 +43,11 @@ MAIN_CSS = """
     #status { height: 1; background: $panel; }
     RichLog { height: 8; border: round $panel-darken-1; }
     Button { height: 3; }
+    # Sci-fi buttons (plan 2026-09-08-scifi-ui S2.3): bold labels; the widget
+    # that owns the focus ring "powers up" to the accent hue (same rule as
+    # inputs). Variant colors (success/warning/default) come from the theme.
+    Button { text-style: bold; }
+    Button:focus, Button:hover { border: round $accent; }
     #family { height: auto; margin: 1 0; }
     .hidden { display: none; }
     #ctq_cap_warn { height: auto; margin-top: 1; color: $text-muted; }

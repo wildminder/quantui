@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   app default; all widget colors follow the theme variables.
 - **Sci-fi input styling** — inputs render with a cyan round frame that
   "powers up" to magenta when focused; the invalid (red) state is preserved.
+- **Sci-fi button styling** — bold labels; the focused/hovered button's
+  border powers up to the accent hue (variant colors follow the theme).
 
 ### Removed
 - **"List all methods" button.** It was redundant — the "Pick from list"
