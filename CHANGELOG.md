@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-08
+
 ### Removed
 - **The top header progress strip.** It duplicated the footer's aggregate
   bar + ETA during runs (both showed the same pct at the same moment) and
