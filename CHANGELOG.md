@@ -5,12 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-08
+
 ### Fixed
 - **Footer dedup — no repeated progress info.** The per-phase rows in the
   footer are now compact clickable phase-name chips (`Loading tensors` /
   `Optimizing INT8`): the counts (`[2600/4000]`) live once in the stats line,
   the wide bar is the single progress bar, and clicking a chip still opens
   the log drawer filtered to that phase. Footer height shrinks accordingly.
+
+### Removed
+- Dead `ProgressView` widget (the pre-footer live-progress box, unmounted
+  since the S1.8 rail): 66 lines of dead code gone.
 
 ## [0.9.0] - 2026-09-08
 
