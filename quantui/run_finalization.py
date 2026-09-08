@@ -70,6 +70,13 @@ class RunFinalizationMixin:
             self.query_one(ResultsCard).show_record(record)
         except NoMatches:
             pass  # results card not mounted yet
+        # F2-S1.2 (plan 2026-09-08-footer-v2): swap the footer to DONE mode —
+        # the card (this verdict) replaces the progress panel so "Done" shows
+        # exactly once. NoMatches-safe like every render path here.
+        try:
+            self.query_one("#run_footer").set_mode("done")
+        except NoMatches:
+            pass  # footer not mounted yet
         # S2.1: completion toast + terminal bell (never on user-stop).
         if outcome == "success":
             self.emit_toast("Quantization finished \u2713", "information")

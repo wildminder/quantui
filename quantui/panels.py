@@ -226,24 +226,50 @@ class ProgressRail(Vertical):
 
 
 class RunFooter(Horizontal):
-    """Full-width run footer (plan 2026-09-08-run-footer, layout v2).
+    """Full-width run footer, TWO-MODE (plan 2026-09-08-footer-v2).
 
-    Holds the former right-rail widgets at the bottom of #body: the stacked
-    ProgressRail (#progress_rail) + status Label (#status) on the left, the
-    ResultsCard on the right. Hidden at startup; QuantApp._show_run_footer()
-    reveals it when a run starts, and it stays visible afterwards. Widget ids
-    are the historical rail ids (contract Q4a) so every handler keeps working
-    unchanged. Master styling lives in MAIN_CSS (#run_footer block) so the
-    app-level stylesheet stays the single source of truth (IMP-001 S3B.1).
+    Mode "progress" (while a run is active): the left panel (#footer_left)
+    shows the wide aggregate bar (#footer_bar), the stats line (#footer_stats),
+    the per-phase ProgressRail (#progress_rail) and the status Label (#status);
+    the ResultsCard is HIDDEN. Mode "done" (after _finish_run_record lands the
+    record): the ResultsCard REPLACES the progress panel entirely (full width)
+    so the verdict appears exactly once. Widget ids are the historical rail ids
+    (contract Q4a); master styling lives in MAIN_CSS (IMP-001 S3B.1).
     """
+
+    MODES = ("progress", "done")
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._mode = "progress"
+
+    def set_mode(self, mode: str) -> None:
+        """Switch the footer panel: 'progress' = left panel only; 'done' = card only."""
+        if mode not in self.MODES:
+            raise ValueError(f"unknown footer mode: {mode}")
+        self._mode = mode
+        self.set_class(mode == "done", "mode-done")
+        try:
+            self.query_one("#footer_left").display = mode == "progress"
+            # ResultsCard import is lazy (cycle-avoidance, see compose); the id
+            # selector reaches the same widget without the class reference.
+            self.query_one("#results_card").display = mode == "done"
+        except NoMatches:
+            pass  # not composed yet; on_mount applies the initial state
 
     def compose(self) -> ComposeResult:
         from .widgets_results import _build_results_card_shared
 
         with Vertical(id="footer_left"):
+            yield ProgressBar(id="footer_bar", show_percentage=True, show_eta=False)
+            yield Label("--", id="footer_stats")
             yield ProgressRail(id="progress_rail")
             yield Label(id="status")
         yield _build_results_card_shared()
+
+    def on_mount(self) -> None:
+        # Initial state: progress panel only (card hidden until a run completes).
+        self.set_mode("progress")
 
 
 def build_main_layout(run_log_max_lines: int) -> Vertical:

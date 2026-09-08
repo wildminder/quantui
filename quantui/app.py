@@ -875,10 +875,13 @@ class QuantApp(
         Idempotent and safe on partial/headless UI. Called at action_run entry so
         the footer (rail + status + results card) is visible for the whole run —
         including the validation-failure early return — and stays visible after
-        completion for the rest of the session.
+        completion for the rest of the session. F2-S1.2 (footer-v2): every new
+        run also resets the footer to PROGRESS mode (swaps out the done panel).
         """
         try:
-            self.query_one(ids.RUN_FOOTER).display = True
+            footer = self.query_one(ids.RUN_FOOTER)
+            footer.display = True
+            footer.set_mode("progress")
         except NoMatches:
             pass  # footer not mounted yet (headless partial UI)
 

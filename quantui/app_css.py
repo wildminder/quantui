@@ -14,6 +14,11 @@ MAIN_CSS = """
                  border-top: solid $panel-darken-1; background: $surface-darken-1; }
     #run_footer > #footer_left { width: 1fr; height: auto; padding: 0 1 0 0; }
     #run_footer > #results_card { width: 50; margin-top: 0; }
+    # F2-S1.2 (plan 2026-09-08-footer-v2): two-state footer. Done mode hides the
+    # left panel via display toggling and stretches the card to full width.
+    #run_footer.mode-done > #results_card { width: 100%; }
+    #footer_bar { width: 1fr; }
+    #footer_stats { height: 1; margin-top: 0; text-style: none; color: $text-muted; }
     .field { height: auto; }
     .field Input { width: 1fr; }
     .field Button { width: auto; }
