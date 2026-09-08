@@ -104,3 +104,18 @@ async def test_run_button_variant_survives(tmp_path, monkeypatch):
         btn = a.query_one("#run")
         assert btn.variant == "success"
         assert btn.display
+
+
+# ---- S3.1: boot stability ----------------------------------------------------------
+
+
+async def test_theme_and_title_survive_repeated_boot(tmp_path, monkeypatch):
+    """Two fresh app instances in one process: theme + title stable both times
+    (guards against theme registration leaking across instances)."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    for _ in range(2):
+        a = appmod.QuantApp()
+        async with a.run_test():
+            assert a.theme == "quantui-cyber"
+            assert a.title == "QuantUI"
+            assert a.get_theme("quantui-cyber").primary == "#00e5ff"

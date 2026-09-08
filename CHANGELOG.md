@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   "powers up" to magenta when focused; the invalid (red) state is preserved.
 - **Sci-fi button styling** — bold labels; the focused/hovered button's
   border powers up to the accent hue (variant colors follow the theme).
+- Theme + title are stable across repeated app boots (pinned by test).
 
 ### Removed
 - **"List all methods" button.** It was redundant — the "Pick from list"
