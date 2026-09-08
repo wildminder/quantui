@@ -239,7 +239,7 @@ def _envelope(phase: str, cur: int, total: int, label: str) -> str:
 
 async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
     """Progress renders INSIDE the footer: an envelope produces a .rail_row
-    under #run_footer (label-only — the wide bar is the ONE progress bar)."""
+    under #run_footer (phase-name chip — no bar, no counts duplication)."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
@@ -252,9 +252,9 @@ async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
         assert len(rows) == 1
         label = rows[0].query_one(".rail_label")
         assert "Quantizing shard" in str(label.content)
-        assert "[2/3]" in str(label.content)
-        # Redundancy fix: rows must NOT contain a second progress bar.
+        # Single-bar rule + dedup round 2: no bar, no counts in the row.
         assert len(list(rows[0].query("ProgressBar"))) == 0
+        assert "[2/3]" not in str(label.content)
 
 
 # ---- F2-S2.1: aggregate footer bar + stats line --------------------------------
