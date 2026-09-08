@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Changed
+- **The app is now titled "QuantUI"** (was "QuantApp", which leaked from the
+  class name into the Header and terminal window title).
+
 ## [0.9.2] - 2026-09-08
 
 ### Removed

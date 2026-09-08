@@ -151,6 +151,10 @@ class QuantApp(
     run_finalization.RunFinalizationMixin,
     App,
 ):
+    # User request (plan 2026-09-08-scifi-ui S1.1): the app is "QuantUI" —
+    # Textual derives the Header + terminal window title from App.TITLE.
+    TITLE = "QuantUI"
+
     # IMP-001 S3B.1: stylesheet extracted verbatim to quantui/app_css.py; the
     # alias keeps the pinned CSS contract (``QuantApp.CSS``) intact.
     CSS = MAIN_CSS
