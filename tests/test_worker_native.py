@@ -141,3 +141,32 @@ def test_worker_native_progress_lines(tmp_path):
     assert proc.returncode == 0, proc.stderr
     # the TUI's stream parser consumes PROGRESS lines
     assert any("PROGRESS" in line or "quantize" in line for line in proc.stdout.splitlines())
+
+
+def test_native_method_id_auto_routes_without_backend_flag(tmp_path):
+    """S5.2: --method native_q8_0 alone implies --backend native (id IS intent)."""
+    src = _fixture_model(tmp_path)
+    out_dir = tmp_path / "out"
+    proc = _run_worker([
+        "--model", str(src), "--output", str(out_dir),
+        "--method", "native_q8_0",  # NO --backend flag
+    ])
+    assert proc.returncode == 0, proc.stderr
+    assert "Native GGUF export" in proc.stdout
+    assert len(list(out_dir.glob("*.gguf"))) == 1
+
+
+def test_arch_gate_error_suggests_native_backend(tmp_path):
+    """S5.2: the blocked-arch error must route the user to --method native_*."""
+    src = _fixture_model(tmp_path)  # vibevoice config
+    proc = _run_worker([
+        "--model", str(src), "--output", str(tmp_path / "out"),
+        "--method", "q8_0",  # unsloth id, default backend -> arch gate
+    ])
+    assert proc.returncode == 1
+    err = proc.stderr
+    assert "UNSLOTH backend" in err
+    assert "native_q8_0" in err and "--backend native" in err
+    assert "Traceback" not in err
+
+

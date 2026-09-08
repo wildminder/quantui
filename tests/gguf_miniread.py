@@ -192,6 +192,6 @@ def _ggml_type_row_sizes():
 
     def _f(info: MiniTensorInfo):
         n = int(np.prod(info.ne))
-        return {0: 4, 1: 2}[info.ggml_type], n  # F32, F16
+        return {0: 4, 1: 2, 30: 2}[info.ggml_type], n  # F32, F16, BF16
 
-    return {8: _q8_0, 2: _q4_0, 0: _f, 1: _f}
+    return {8: _q8_0, 2: _q4_0, 0: _f, 1: _f, 30: _f}
