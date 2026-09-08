@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
-## [Unreleased]
+## [0.10.0] - 2026-09-09
 
 ### Changed
 - **The app is now titled "QuantUI"** (was "QuantApp", which leaked from the
