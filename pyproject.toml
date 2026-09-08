@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unsloth-quant-tui"
-version = "0.10.0"
+version = "0.10.1"
 description = "Terminal UI for multi-family model quantization (Unsloth GGUF + ComfyUI convert_to_quant)."
 readme = "README.md"
 requires-python = ">=3.12"
