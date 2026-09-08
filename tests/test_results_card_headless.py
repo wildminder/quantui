@@ -77,6 +77,42 @@ async def test_results_card_failed_shows_exit_code(tmp_path, monkeypatch):
         assert "Failed" in outcome
 
 
+async def test_success_run_reveals_buttons(tmp_path, monkeypatch):
+    """S2.2 (plan 2026-09-08-run-footer): rc=0 -> Copy/Open buttons appear."""
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=0)
+
+        a.action_run()
+        await a.workers.wait_for_complete()
+        await pilot.pause()
+
+        await _wait_until(lambda: "Done" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        assert a.query_one(ResultsCard).query_one("#result_buttons").display is True
+
+
+async def test_failed_run_hides_buttons(tmp_path, monkeypatch):
+    """S2.2: rc!=0 -> Copy/Open buttons stay hidden."""
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=2)
+
+        a.action_run()
+        await a.workers.wait_for_complete()
+        await pilot.pause()
+
+        await _wait_until(lambda: "Failed" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+        assert a.query_one(ResultsCard).query_one("#result_buttons").display is False
+
+
 async def test_recent_job_recorded_after_run(tmp_path, monkeypatch):
     """A finished run lands in store.json recents with correct fields."""
     cfg_dir = tmp_path / "cfg"

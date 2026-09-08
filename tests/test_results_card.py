@@ -54,3 +54,57 @@ def test_run_record_to_card_rows_shape():
         assert key in d
     assert d["exit_code"] == 2
     assert d["status"] == "failed"
+
+
+# ---- S2.2 (plan 2026-09-08-run-footer): success-only results buttons ----------
+
+
+def _make_record(status: str) -> ps.RunRecord:
+    return ps.RunRecord(
+        ts="2026-09-08 12:00:00", family="gguf", method="q4_k_m",
+        output="/data/out.gguf", status=status, exit_code=0, duration_s=1.0,
+    )
+
+
+async def test_buttons_hidden_by_default():
+    """No record yet -> button row hidden."""
+    from textual.app import App, ComposeResult
+
+    from quantui.widgets_results import ResultsCard
+
+    class _Host(App):
+        def compose(self) -> ComposeResult:
+            yield ResultsCard()
+
+    app = _Host()
+    async with app.run_test():
+        card = app.query_one(ResultsCard)
+        assert card.query_one("#result_buttons").display is False
+
+
+async def test_buttons_visible_only_on_success():
+    """show_record gates #result_buttons to status == 'success' exactly."""
+    from textual.app import App, ComposeResult
+
+    from quantui.widgets_results import ResultsCard
+
+    class _Host(App):
+        def compose(self) -> ComposeResult:
+            yield ResultsCard()
+
+    app = _Host()
+    async with app.run_test() as pilot:
+        card = app.query_one(ResultsCard)
+        btn_row = card.query_one("#result_buttons")
+
+        card.show_record(_make_record("success"))
+        await pilot.pause()
+        assert btn_row.display is True
+
+        card.show_record(_make_record("failed"))
+        await pilot.pause()
+        assert btn_row.display is False
+
+        card.show_record(_make_record("stopped"))
+        await pilot.pause()
+        assert btn_row.display is False
