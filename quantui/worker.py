@@ -18,6 +18,18 @@ import shutil
 import sys
 
 
+# Module-level snapshot of the native surface (S5.2): the dispatch check must
+# not import gguf_qkernels (which pulls numpy) before --list-methods can run.
+def _native_methods() -> frozenset:
+    try:
+        from .gguf_qkernels import NATIVE_METHODS
+        return frozenset(NATIVE_METHODS)
+    except Exception:  # boundary: snapshot must never break worker startup
+        return frozenset()
+
+NATIVE_METHOD_SET = _native_methods()
+
+
 def log(msg: str) -> None:
     print(msg, flush=True)
 
@@ -223,9 +235,14 @@ def check_supported_architecture(model_dir: str) -> None:
             "Models like VibeVoice need a recent transformers (the VibeVoice class was "
             "merged into transformers ~Sept 2025, PR #40546). Try upgrading:\n"
             "    pip install -U transformers\n"
-            "Note: even after upgrading, Unsloth GGUF export only supports models "
+            "Note: even after upgrading, the UNSLOTH backend only supports models "
             "whose weights llama.cpp can represent, so TTS / Seq2Seq models still "
-            "won't convert to GGUF."
+            "won't convert that way.\n"
+            "FIX: use the NATIVE backend — it converts ANY architecture without "
+            "transformers (generic name mapping), e.g.:\n"
+            f"    ... --method native_q8_0 --backend native   "
+            f"(surface: {', '.join(sorted(NATIVE_METHOD_SET))})\n"
+            "Or in the TUI: GGUF panel -> method 'native_q8_0' -> Run."
         )
         return
     archs = list(getattr(cfg, "architectures", []) or [])
@@ -245,14 +262,17 @@ def check_supported_architecture(model_dir: str) -> None:
     if blocked:
         name = ", ".join(archs) if archs else (str(model_type) if model_type else "unknown")
         fail(
-            f"Unsupported architecture: {name}.\n"
+            f"Unsupported architecture for the UNSLOTH backend: {name}.\n"
             "Unsloth GGUF quantization only supports models whose weights llama.cpp "
             "can represent (causal LMs and VLMs with a causal-LM text tower).\n"
-            "This model type is TTS / Seq2Seq / generative-audio, which cannot be "
-            "converted to GGUF.\n"
-            "Options: (1) use a causal-LM or supported VLM model, or (2) run it in "
-            "PyTorch with bf16/fp16 or weight-only int4/int8 (torchao / quanto / "
-            "bitsandbytes) instead of GGUF."
+            "This model type is TTS / Seq2Seq / generative-audio.\n"
+            "FIX: re-run with a NATIVE method id — it converts ANY architecture "
+            "(generic name mapping, no transformers), e.g.:\n"
+            f"    ... --method native_q8_0 --backend native   "
+            f"(surface: {', '.join(sorted(NATIVE_METHOD_SET))})\n"
+            "Or in the TUI: GGUF panel -> method 'native_q8_0' -> Run.\n"
+            "(Alternatively run the model in PyTorch with bf16/fp16 or weight-only "
+            "int4/int8 — torchao / quanto / bitsandbytes.)"
         )
 
 
@@ -354,11 +374,17 @@ def main() -> None:
         _run_native_backend(args)
         return
 
+    # S5.2 UX: a native_* method id implies the native backend even when the
+    # user (or an older TUI profile) omitted --backend — the id IS the intent.
+    if args.method and args.method.strip() in NATIVE_METHOD_SET:
+        _run_native_backend(args)
+        return
+
     _run_unsloth_backend(args)
 
 
 def _run_unsloth_backend(args) -> None:
-    """S4.2 dispatch target: the original unsloth flow (T7 et al.), verbatim."""
+    """S4.2 dispatch target: the original unsloth flow (T7 et al.)."""
     from .run_config import parse_methods
 
     methods = parse_methods(args.method)
