@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-08
+
 ### Added
 - **`native_bf16` — 5th native method (lossless BF16).** bf16 sources can
   hold magnitudes f16 cannot (|x| > 65504 → inf under `native_f16`);
@@ -21,6 +23,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   native` (or TUI: method `native_q8_0` → Run).
 - **`native_*` method ids auto-route to the native backend** even without
   `--backend` — the id is the intent; older TUI profiles keep working.
+- **Q8_0 rounding now bit-matches llama.cpp/quantui-rs** (user-reported:
+  `native_q8_0` voice cloning slightly worse than quantui-rs output).
+  The kernel used `rint(x/d)` — ties-to-even + true division — while
+  llama.cpp computes `roundf(x * (1/d))`: half-away-from-zero with an
+  f32 reciprocal. On ties ~0.1–0.5% of codes flipped ±1. After the fix,
+  a full-byte diff against the VibeVoice oracle shows ALL tensors
+  (378 Q8_0 + 103 F16 + 723 F32) byte-identical. Rounding pin test added
+  (half-away on ±0.5 ties); Q4_0 re-verified bit-exact vs gguf-py.
+- Native method descriptions trimmed to one short sentence (<80 chars,
+  contract-tested); redundant `[NATIVE]` hint removed — badge +
+  description suffice.
 
 ## [0.7.0] - 2026-09-08
 
