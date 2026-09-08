@@ -301,6 +301,10 @@ METHODS: list[QuantMethod] = [
                 approx_bpw=16.0,
                 description="Half-precision GGUF via the native exporter — lossless "
                             "for f16 sources; no transformers/unsloth needed."),
+    QuantMethod("native_bf16", "BF16 (native, lossless)", Family.GGUF, Backend.NATIVE,
+                approx_bpw=16.0,
+                description="BF16 GGUF via the native exporter — LOSSLESS for bf16 "
+                            "sources (no f16 inf-overflow risk); no transformers/unsloth."),
     QuantMethod("native_f32", "F32 (native)", Family.GGUF, Backend.NATIVE,
                 approx_bpw=32.0,
                 description="Full-precision GGUF via the native exporter — no "

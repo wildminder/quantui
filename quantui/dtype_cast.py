@@ -26,6 +26,7 @@ __all__ = [
     "f32_bits_to_f16_bits",
     "f16_bits_to_f32_bits",
     "bf16_bits_to_f32_bits",
+    "f32_to_bf16",
     "cast_tensor_bytes",
     "cast_safetensors_file",
     "cast_shards_to_single",
@@ -50,6 +51,28 @@ def f32_bits_to_bf16_bits(u32: int) -> int:
     # lsb of the kept half + the 16 dropped bits decide rounding.
     rounding_bias = 0x7FFF + ((u32 >> 16) & 1)
     return (u32 + rounding_bias) >> 16
+
+
+def f32_to_bf16(arr):
+    """Vectorized RTNE f32 -> bf16 (uint16 bit patterns), numpy-native.
+
+    Semantics mirror :func:`f32_bits_to_bf16_bits`: NaN payloads keep the top
+    16 bits with the quiet bit forced; everything else rounds
+    ties-to-even.  Returns a ``<u2`` array of bit patterns — NOT a float
+    dtype (numpy has none for bf16).
+    """
+    import numpy as np
+
+    u32 = np.ascontiguousarray(arr, dtype=np.float32).view(np.uint32)
+    nan_mask = (u32 & np.uint32(0x7F80_0000)) == np.uint32(0x7F80_0000)
+    inf_or_finite = ~((u32 & np.uint32(0x7FFF_FFFF)) > np.uint32(0x7F80_0000))
+    # rounding bias: 0x7FFF + lsb of the kept half (ties-to-even)
+    bias = np.uint32(0x7FFF) + ((u32 >> np.uint32(16)) & np.uint32(1))
+    rounded = (u32 + bias) >> np.uint32(16)
+    # NaN: top 16 bits + forced quiet bit
+    nan_result = (u32 >> np.uint32(16)) | np.uint32(0x0040)
+    out = np.where(inf_or_finite | ~nan_mask, rounded, nan_result)
+    return out.astype("<u2").reshape(np.asarray(arr).shape)
 
 
 def f32_bits_to_f16_bits(u32: int) -> int:
