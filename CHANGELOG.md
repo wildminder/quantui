@@ -13,7 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   no more permanently reserved 30% side column. (Layout contract v2:
   `#body` children are `#params` + `#run_footer`; `#rail` is gone; all
   historical widget ids inside the footer are preserved, so handlers and
-  profiles keep working unchanged.)
+  profiles keep working unchanged.) The footer shows for the whole run —
+  including the validation-failure early return — and through success,
+  failure and user-stop outcomes.
 
 ## [0.8.0] - 2026-09-08
 
