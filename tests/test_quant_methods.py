@@ -358,10 +358,12 @@ def test_native_methods_last():
     assert {m.id for m in METHODS[:first_native]} == official
 
 
-def test_native_descriptions_mention_no_transformers():
+def test_native_descriptions_concise():
+    """S5.2 follow-up: trimmed copy; each still says WHAT it is, no repetition."""
     for m in METHODS:
         if m.backend == Backend.NATIVE:
-            assert "transformers" in m.description or "unsloth" in m.description, m.id
+            assert len(m.description) < 80, (m.id, len(m.description))
+            assert m.description.endswith("."), m.id
 
 
 def test_needs_imatrix_flags_correct():
