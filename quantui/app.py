@@ -245,6 +245,10 @@ class QuantApp(
         # (IMP-001 S3B.3): the displayed % never dips within one run; reset at
         # run boundaries only (see _clear_header_strip).
         self._progress_hold = HeaderProgressHold()
+        # F2-S2.1 (footer-v2): the footer aggregate bar has its OWN hold — the
+        # header hold is reset by clear_live() on plain log lines, the footer
+        # bar must stay monotonic within a run (reset only in _show_run_footer).
+        self._footer_hold = HeaderProgressHold()
 
     # ---- composition ---------------------------------------------------------
 
@@ -405,7 +409,8 @@ class QuantApp(
 
     def update_progress(self, states: list) -> None:
         """Render the structured/collapsed progress store into #progress_rail (and,
-        since S1.7, into the global header strip).
+        since S1.7, into the global header strip; since footer-v2 S2.1, into the
+        footer's wide aggregate bar + stats line).
 
         ``states`` is the ordered list of :class:`~quantui.live_progress.ProgressState`
         from :attr:`_live`. Each determinate state renders as its own stacked
@@ -416,6 +421,46 @@ class QuantApp(
         except NoMatches:
             pass  # rail not mounted yet
         self._render_header_strip(states)
+        self._render_footer_bar(states)
+
+    def _render_footer_bar(self, states: list) -> None:
+        """Footer aggregate bar + stats line (footer-v2 S2.1).
+
+        Uses the footer-OWN hold (``_footer_hold``), NOT the header's: the
+        header hold is reset by ``clear_live()`` on every plain log line, while
+        the footer bar must stay monotonic WITHIN a run and reset only at run
+        boundaries (``_show_run_footer``).
+        """
+        try:
+            from textual.widgets import ProgressBar as _PB
+
+            bar = self.query_one("#footer_bar", _PB)
+            stats_lbl = self.query_one("#footer_stats", Label)
+        except NoMatches:
+            return  # footer not mounted yet
+        elapsed = 0.0
+        if self._run_start_ts > 0:
+            elapsed = time.monotonic() - self._run_start_ts
+        held = self._footer_hold.held()
+        st = run_monitor.footer_stats(states, elapsed, held)
+        if st["pct"] is None:
+            # No determinate signal AND nothing held: show 0 but keep the hold
+            # untouched (a later determinate line still climbs from held=None).
+            if held is None:
+                bar.update(total=100, progress=0)
+                stats_lbl.update("--")
+                return
+            st["pct"] = held
+        else:
+            st["pct"] = self._footer_hold.next(st["pct"])
+        bar.update(total=100, progress=st["pct"])
+        eta = run_monitor.format_eta(st["eta_s"])
+        mm = run_monitor.format_eta(st["elapsed_s"])
+        parts = [f"{st['pct']:.0f}%" if st["pct"] is not None else "--",
+                 f"Elapsed {mm}", f"ETA {eta}"]
+        if st["counts"]:
+            parts.append(st["counts"])
+        stats_lbl.update(" • ".join(parts))
 
     def on_progress_rail_bar_clicked(self, event) -> None:
         """S1.9: clicking a progress row opens the log drawer filtered to that
@@ -478,7 +523,11 @@ class QuantApp(
         eta_lbl.update(run_monitor.format_eta(eta_s))
 
     def _clear_header_strip(self) -> None:
-        """Reset the header strip to idle (run finished / new run starting)."""
+        """Reset the header strip to idle (run finished / new run starting).
+
+        F2-S2.1: the footer aggregate bar + stats line reset with it (same run
+        boundary), so a NEW run starts from 0 again.
+        """
         self._progress_hold.reset()
         try:
             bar = self.query_one("#header_progress", ProgressBar)
@@ -487,9 +536,17 @@ class QuantApp(
             eta_lbl.update("--")
         except NoMatches:
             pass  # header strip not mounted yet
+        # F2-S2.1: the FOOTER bar/stats reset only at run boundaries
+        # (_show_run_footer), NOT here — mid-run plain lines must not clear it.
 
     def clear_live(self) -> None:
-        """Blank the progress rail (keep it mounted so the layout doesn't jump)."""
+        """Blank the progress rail (keep it mounted so the layout doesn't jump).
+
+        F2-S2.1: the FOOTER bar is NOT touched here — a plain log line clears
+        the live store mid-run, but the footer aggregate must hold its value
+        (its own hold, ``_footer_hold``, resets only at run boundaries). The
+        header strip keeps its historic reset-on-clear behavior.
+        """
         try:
             self.query_one("#progress_rail", panels.ProgressRail).set_states([])
         except NoMatches:
@@ -884,6 +941,8 @@ class QuantApp(
             footer.set_mode("progress")
         except NoMatches:
             pass  # footer not mounted yet (headless partial UI)
+        # Run boundary: the footer bar restarts from 0 for the new run.
+        self._footer_hold.reset()
 
     @work(thread=True, exclusive=True)
     def action_run(self) -> None:
