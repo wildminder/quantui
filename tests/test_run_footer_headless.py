@@ -166,3 +166,60 @@ async def test_footer_survives_stop(tmp_path, monkeypatch):
         await _wait_until(lambda: "Stopped" in str(
             a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
         assert a.query_one(ids.RUN_FOOTER, panels.RunFooter).display is True
+
+
+# ---- S3.1: e2e pins + regression guards ---------------------------------------
+
+
+def _envelope(phase: str, cur: int, total: int, label: str) -> str:
+    import json
+    return "CTQ_PROGRESS " + json.dumps(
+        {"phase": phase, "cur": cur, "total": total, "pct": round(100 * cur / total, 1),
+         "label": label}
+    )
+
+
+async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
+    """Progress truly renders INSIDE the footer: an envelope produces a
+    determinate .rail_row under #run_footer (not just a mounted rail)."""
+    import textual.widgets as tw
+
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a._show_run_footer()
+        await pilot.pause()
+        a.log_msg(_envelope("shard", 2, 3, "Quantizing shard"))
+        await pilot.pause()
+        footer = a.query_one("#run_footer", panels.RunFooter)
+        rows = list(footer.query(".rail_row"))
+        assert len(rows) == 1
+        bar = rows[0].query_one(".rail_bar")
+        assert isinstance(bar, tw.ProgressBar)
+
+
+async def test_footer_updates_status_line():
+    """set_status lands in the footer's #status; exactly ONE #status exists."""
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        assert len(list(a.query("#status"))) == 1
+        a._show_run_footer()
+        a.set_status("Running (q8_0)...")
+        await pilot.pause()
+        assert "Running (q8_0)" in str(a.query_one("#status", Label).content)
+
+
+async def test_log_drawer_still_toggles():
+    """Regression guard: the drawer binding still toggles the log above the footer."""
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a._show_run_footer()
+        await pilot.pause()
+        drawer = a.query_one("#log_drawer")
+        assert drawer.display is False
+        a.action_toggle_log()
+        await pilot.pause()
+        assert drawer.display is True
+        a.action_toggle_log()
+        await pilot.pause()
+        assert drawer.display is False

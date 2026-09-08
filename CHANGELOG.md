@@ -19,6 +19,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **[Copy path] / [Open folder] reveal only on success.** The results-card
   button row (`#result_buttons`) is hidden while idle/running/failed/stopped
   and appears exactly when a finished run has `status == "success"`.
+- Footer e2e pins: structured progress envelopes render determinate bar rows
+  inside the footer; exactly one `#status` exists; the log-drawer toggle
+  keeps working above the footer.
 
 ## [0.8.0] - 2026-09-08
 
