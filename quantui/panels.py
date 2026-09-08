@@ -114,16 +114,15 @@ class ProgressView(Vertical):
 
 
 class ProgressRailRow(Horizontal):
-    """One stacked row of the ProgressRail: a phase label with counts (no bar).
+    """One stacked row of the ProgressRail: a clickable phase-name chip (no counts).
 
-    F2 fix (user report): the footer already has the wide aggregate bar
-    (#footer_bar); a per-row ProgressBar rendered the SAME aggregate signal a
-    second time — redundant. The row is now label-only: ``label [cur/total]``
-    (the phase's own counts, NOT the aggregate pct). Clicking a row still
-    posts :class:`ProgressRail.BarClicked` so the app can open the log drawer
-    filtered to that phase (S1.9). The row fills its label in ``on_mount`` (a
-    freshly ``mount()``-ed row has no composed children yet, so callers must
-    NOT query into it before the mount completes).
+    F2 dedup round 2 (user report): the stats line (#footer_stats) already
+    renders every phase's counts; a row repeating "label [cur/total]" was pure
+    duplication. The row now shows ONLY the phase name — its remaining value
+    is the click-to-filter affordance (click -> log drawer filtered to this
+    phase, S1.9). The row fills its label in ``on_mount`` (a freshly
+    ``mount()``-ed row has no composed children yet, so callers must NOT
+    query into it before the mount completes).
     """
 
     DEFAULT_CSS = """
@@ -143,7 +142,7 @@ class ProgressRailRow(Horizontal):
         self.update_state(self._state)
 
     def update_state(self, st) -> None:
-        """Fill the label from one ProgressState.
+        """Fill the label from one ProgressState (phase name only).
 
         Best-effort on freshly mounted rows: a row's children only exist after
         its ``mount()`` completes, so a not-yet-composed row keeps ``_state``
@@ -154,7 +153,8 @@ class ProgressRailRow(Horizontal):
             lbl = self.query_one(".rail_label", Label)
         except NoMatches:
             return  # children not composed yet; on_mount will fill it
-        lbl.update(st.text or st.phase)
+        # Counts live in the stats line; the chip shows just the phase name.
+        lbl.update(st.label or st.phase or st.text)
 
 
 class ProgressRail(Vertical):
