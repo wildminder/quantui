@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **`native_bf16` — 5th native method (lossless BF16).** bf16 sources can
+  hold magnitudes f16 cannot (|x| > 65504 → inf under `native_f16`);
+  `native_bf16` stores bf16 tensors **verbatim** (GGUF qtype 30) — bit-
+  lossless at the same 16 bpw. Includes vectorized
+  `dtype_cast.f32_to_bf16` (RTNE, ties-to-even, NaN quiet-bit forced;
+  bit-exact vs the scalar oracle on 100k random values). Registry now 40
+  ids.
+
+### Fixed
+- **Blocked-architecture errors now name the fix.** When the unsloth
+  backend rejects a model (unrecognized config or TTS/Seq2Seq blocklist),
+  the error points at the native backend: `--method native_q8_0 --backend
+  native` (or TUI: method `native_q8_0` → Run).
+- **`native_*` method ids auto-route to the native backend** even without
+  `--backend` — the id is the intent; older TUI profiles keep working.
+
 ## [0.7.0] - 2026-09-08
 
 ### Added
