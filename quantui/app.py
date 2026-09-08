@@ -67,6 +67,7 @@ from .run_config import (  # noqa: F401  (re-export)
     DEFAULT_CTQ_FORMAT,
     DEFAULT_CTQ_OUTPUT_MODE,
 )
+from .theme import build_cyber_theme
 from .widgets_results import ResultsCard, report_to_issues
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -208,6 +209,10 @@ class QuantApp(
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        # Sci-fi theme (plan 2026-09-08-scifi-ui S2.1): register + default to
+        # 'quantui-cyber' (deep-space surfaces, cyan primary, magenta accent).
+        self.register_theme(build_cyber_theme())
+        self.theme = "quantui-cyber"
         self.family: Family = Family.GGUF
         # Feature A: per-run full-log temp file (authoritative; RichLog only shows a cap).
         self._run_log_path: str = ""
