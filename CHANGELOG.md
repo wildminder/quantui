@@ -13,6 +13,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **New "quantui-cyber" sci-fi theme** — deep-space blue surfaces, electric
   cyan primary, magenta accent, neon-green success. Registered and set as the
   app default; all widget colors follow the theme variables.
+- **Sci-fi input styling** — inputs render with a cyan round frame that
+  "powers up" to magenta when focused; the invalid (red) state is preserved.
 
 ### Removed
 - **"List all methods" button.** It was redundant — the "Pick from list"

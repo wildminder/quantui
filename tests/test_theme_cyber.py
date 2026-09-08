@@ -49,3 +49,36 @@ async def test_app_defaults_to_cyber(tmp_path, monkeypatch):
     a = appmod.QuantApp()
     async with a.run_test():
         assert a.theme == "quantui-cyber"
+
+
+# ---- S2.2: sci-fi input styling ---------------------------------------------------
+
+_MAIN_CSS = appmod.QuantApp.CSS  # aliases MAIN_CSS (pinned contract)
+
+
+def test_input_css_sci_fi_pins():
+    """MAIN_CSS drives the sci-fi input look: cyan round frame, focus power-up."""
+    assert "Input {" in _MAIN_CSS and "border: round $primary" in _MAIN_CSS
+    assert "Input:focus" in _MAIN_CSS and "border: round $accent" in _MAIN_CSS
+
+
+def test_invalid_input_still_red():
+    """The -invalid state keeps a red border (was pinned pre-theme)."""
+    assert "Input.-invalid" in _MAIN_CSS and "$error" in _MAIN_CSS
+
+
+async def test_input_focus_border_changes(tmp_path, monkeypatch):
+    """Focusing a real Input changes its rendered border (cyan -> accent hue)."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        inp = a.query_one("#model")
+        a.set_focus(inp)
+        await pilot.pause()
+        border_focused = inp.styles.border
+        a.set_focus(None)
+        await pilot.pause()
+        border_blurred = inp.styles.border
+        assert border_focused != border_blurred, (
+            "focus must change the input border (sci-fi power-up)"
+        )
