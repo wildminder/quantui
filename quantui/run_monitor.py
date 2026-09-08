@@ -60,3 +60,37 @@ def format_eta(eta_s: float | int | None) -> str:
     if h:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
+
+
+def footer_stats(
+    states: list, elapsed_s: float = 0.0, held_pct: float | None = None
+) -> dict:
+    """Derive the run-footer stats payload (plan 2026-09-08-footer-v2 S2.1).
+
+    Args:
+        states: ordered ``ProgressState`` list from ``LiveProgressStore.states()``.
+        elapsed_s: seconds since the run started.
+        held_pct: last monotonic aggregate pct (from ``HeaderProgressHold``) —
+            wins over a fresh LOWER aggregate so the footer bar never dips when
+            a log line temporarily clears the store (same rule as the header).
+
+    Returns:
+        ``{"pct": float | None, "eta_s": float | None, "elapsed_s": float,
+        "counts": str}`` — ``counts`` joins the determinate states' single-line
+        texts (``label [cur/total]``) with "; " ("" when none).
+    """
+    pct, eta_s = aggregate(states, elapsed_s)
+    if pct is None:
+        pct = held_pct  # hold fallback: store momentarily empty
+    elif held_pct is not None and held_pct > pct:
+        pct = held_pct  # monotonic: never dip below the held value
+    counts = "; ".join(
+        st.text for st in states
+        if getattr(st, "determinate", False) and (getattr(st, "text", "") or "").strip()
+    )
+    return {
+        "pct": pct,
+        "eta_s": eta_s,
+        "elapsed_s": float(elapsed_s),
+        "counts": counts,
+    }

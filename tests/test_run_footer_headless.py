@@ -256,6 +256,51 @@ async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
         assert isinstance(bar, tw.ProgressBar)
 
 
+# ---- F2-S2.1: aggregate footer bar + stats line --------------------------------
+
+
+async def test_footer_bar_tracks_progress(tmp_path, monkeypatch):
+    """#footer_bar progress == aggregate pct; stats line has pct/Elapsed/ETA/counts."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a._show_run_footer()
+        a._run_start_ts = 1.0  # deterministic-ish elapsed > 0
+        await pilot.pause()
+        a.log_msg(_envelope("quantize", 2600, 4000, "Optimizing INT8"))
+        await pilot.pause()
+        from textual.widgets import ProgressBar
+
+        footer = a.query_one("#run_footer", panels.RunFooter)
+        bar = footer.query_one("#footer_bar", ProgressBar)
+        stats = str(footer.query_one("#footer_stats", Label).content)
+        assert bar.progress == 65  # 2600/4000
+        assert "65" in stats
+        assert "Elapsed" in stats
+        assert "ETA" in stats
+        assert "2600/4000" in stats
+
+
+async def test_footer_bar_monotonic_like_header(tmp_path, monkeypatch):
+    """A sparse line clearing the store must NOT reset the footer bar to 0."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a._show_run_footer()
+        await pilot.pause()
+        a.log_msg(_envelope("quantize", 3000, 4000, "Optimizing INT8"))  # 75%
+        await pilot.pause()
+        from textual.widgets import ProgressBar
+
+        footer = a.query_one("#run_footer", panels.RunFooter)
+        bar = footer.query_one("#footer_bar", ProgressBar)
+        assert bar.progress == 75
+        # A plain log line clears the live store (header-hold semantics).
+        a.log_msg("some ordinary log line without progress data")
+        await pilot.pause()
+        assert bar.progress == 75, "footer bar must hold, not reset"
+
+
 async def test_footer_updates_status_line():
     """set_status lands in the footer's #status; exactly ONE #status exists."""
     a = appmod.QuantApp()
