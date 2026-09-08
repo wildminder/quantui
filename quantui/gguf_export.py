@@ -38,9 +38,6 @@ _DT: dict[str, tuple[int, bool]] = {
 # method id -> general.file_type id (llama.cpp FTYPE convention)
 _FILE_TYPE = {"native_q8_0": 7, "native_q4_0": 2, "native_f16": 1,
               "native_bf16": 1, "native_f32": 0}
-# method id -> GGML qtype id for tensor-type reporting
-_QTYPE_ID = {"native_q8_0": 8, "native_q4_0": 2, "native_f16": 1,
-             "native_bf16": 30, "native_f32": 0}
 
 
 class GgufExportError(ValueError):
