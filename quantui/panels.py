@@ -114,16 +114,20 @@ class ProgressView(Vertical):
 
 
 class ProgressRailRow(Horizontal):
-    """One stacked row of the ProgressRail: a phase label + a determinate bar.
+    """One stacked row of the ProgressRail: a phase label with counts (no bar).
 
-    Clicking a row posts :class:`ProgressRail.BarClicked` so the app can open the
-    log drawer filtered to that phase (S1.9). The row fills its children in
-    ``on_mount`` (a freshly ``mount()``-ed row has no composed children yet, so
-    callers must NOT query into it before the mount completes).
+    F2 fix (user report): the footer already has the wide aggregate bar
+    (#footer_bar); a per-row ProgressBar rendered the SAME aggregate signal a
+    second time — redundant. The row is now label-only: ``label [cur/total]``
+    (the phase's own counts, NOT the aggregate pct). Clicking a row still
+    posts :class:`ProgressRail.BarClicked` so the app can open the log drawer
+    filtered to that phase (S1.9). The row fills its label in ``on_mount`` (a
+    freshly ``mount()``-ed row has no composed children yet, so callers must
+    NOT query into it before the mount completes).
     """
 
     DEFAULT_CSS = """
-    ProgressRailRow { height: 2; margin-bottom: 1; }
+    ProgressRailRow { height: 1; margin-bottom: 0; }
     """
 
     def __init__(self, st) -> None:
@@ -134,13 +138,12 @@ class ProgressRailRow(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Label("", classes="rail_label")
-        yield ProgressBar(show_percentage=False, classes="rail_bar")
 
     def on_mount(self) -> None:
         self.update_state(self._state)
 
     def update_state(self, st) -> None:
-        """Fill label + bar from one ProgressState.
+        """Fill the label from one ProgressState.
 
         Best-effort on freshly mounted rows: a row's children only exist after
         its ``mount()`` completes, so a not-yet-composed row keeps ``_state``
@@ -149,25 +152,20 @@ class ProgressRailRow(Horizontal):
         self._state = st
         try:
             lbl = self.query_one(".rail_label", Label)
-            bar = self.query_one(".rail_bar", ProgressBar)
         except NoMatches:
-            return  # children not composed yet; on_mount will fill them
+            return  # children not composed yet; on_mount will fill it
         lbl.update(st.text or st.phase)
-        if getattr(st, "determinate", False):
-            if st.total:
-                bar.update(total=st.total, progress=min(st.cur or 0, st.total))
-            elif st.pct is not None:
-                bar.update(total=100, progress=int(st.pct))
 
 
 class ProgressRail(Vertical):
-    """Stacked determinate mini-bars, one per collapsed progress state (plan S1.8).
+    """Stacked phase labels, one per collapsed progress state (plan S1.8).
 
     Replaces the single ``#live_progress`` widget: every entry of
-    ``LiveProgressStore.states()`` renders as its own label+bar row (max
-    ``MAX_ROWS`` visible; overflow collapses into a "+N more" label). A legacy
-    text-only state still gets a row -- with the bar hidden. Clicking a row
-    posts :class:`BarClicked` with the phase key.
+    ``LiveProgressStore.states()`` renders as its own label row (max
+    ``MAX_ROWS`` visible; overflow collapses into a "+N more" label). Since
+    the footer-v2 redundancy fix the rows are label-only — the wide aggregate
+    bar (#footer_bar) is the single progress bar. Clicking a row posts
+    :class:`BarClicked` with the phase key.
     """
 
     MAX_ROWS = 4
@@ -261,7 +259,10 @@ class RunFooter(Horizontal):
         from .widgets_results import _build_results_card_shared
 
         with Vertical(id="footer_left"):
-            yield ProgressBar(id="footer_bar", show_percentage=True, show_eta=False)
+            # The ONE progress bar. show_percentage=False: the stats line right
+            # below renders the pct (a separate PercentageStatus sub-widget
+            # overlapped the stats line otherwise).
+            yield ProgressBar(id="footer_bar", show_percentage=False, show_eta=False)
             yield Label("--", id="footer_stats")
             yield ProgressRail(id="progress_rail")
             yield Label(id="status")
