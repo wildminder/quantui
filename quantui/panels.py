@@ -150,7 +150,11 @@ class ProgressRail(Vertical):
 
     def on_click(self, event) -> None:
         """Click any part of a row -> post BarClicked(phase)."""
-        target = event.target
+        # Textual 8.x MouseEvent carries the posted-to widget as ``.widget``
+        # (no ``.target`` — that attribute exists only in DOM-style event
+        # APIs). ``.widget`` is the chip Label for row clicks and the rail
+        # itself otherwise; the parent walk resolves Label -> row.
+        target = event.widget
         while target is not None and not isinstance(target, ProgressRailRow):
             target = target.parent
         if isinstance(target, ProgressRailRow):
