@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **BlockBar widget** (`quantui/widgets_progress.py`, plan
+  2026-09-09-control-panel S1.2): a chunky multi-row progress bar that fills
+  its entire widget area with █/░ blocks — the native ProgressBar renders a
+  single 32-cell 1-row strip and cannot do multi-row fills. Exposes the
+  ProgressBar-compatible `update(total=, progress=)` API and a 0-100
+  `progress` alias so the run footer can swap it in without touching callers.
+
 ### Changed
 - **Palette v2 "control room slate"** (plan 2026-09-09-control-panel S1.1):
   the deep-space near-black stack (~4-12% luminance) is replaced by a

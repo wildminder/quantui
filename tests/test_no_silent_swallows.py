@@ -56,6 +56,7 @@ BASELINE: dict[str, int] = {
     "stream_parser.py": 0,
     "stream_quant.py": 0,
     "theme.py": 0,  # sci-fi theme builder (plan 2026-09-08-scifi-ui S2.1): pure, no except
+    "widgets_progress.py": 0,  # BlockBar (plan 2026-09-09-control-panel S1.2): pure render math, no except
     "tensor_quant.py": 0,
     "ui_bridge.py": 0,
     "widgets_results.py": 0,  # narrowed to NoMatches (STEP 2.5)
