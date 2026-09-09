@@ -114,6 +114,100 @@ def test_q8_0_dequantize_size_mismatch():
         dequantize_q8_0(b"\x00" * 10, 64)
 
 
+def test_q8_0_denormal_block_silent_and_oracle_exact():
+    """USER REPORT 2026-09-09 (VibeVoice-ASR-HF native_q8_0): blocks whose
+    maxabs is a tiny DENORMAL (zero-init noise ~1e-40) made 1/d overflow to
+    inf -> NaN products -> RuntimeWarnings (overflow in divide / invalid in
+    multiply+cast) AND wrong codes (NaN->int32 wrapped to INT_MIN, clipped
+    to -127 instead of the oracle's 0). The kernel must be WARNING-FREE and
+    BYTE-IDENTICAL to the gguf-py oracle on all such inputs.
+
+    Live-oracle comparison: skipped when gguf-py is absent (the gate venv
+    has no torch/gguf by mandate); runs in the worker env."""
+    import warnings
+
+    pytest.importorskip("gguf")
+    from gguf import GGMLQuantizationType
+    from gguf.quants import quantize as oracle_quantize
+
+    rng = np.random.default_rng(42)
+    cases = (
+        # denormal maxabs blocks mixed with a normal block (user scenario)
+        np.array([[1e-40, 0.0, -5e-41] + [0.0] * 29,
+                  [1e-45, 2e-45] + [0.0] * 30,
+                  np.linspace(-1, 1, 32, dtype=np.float32)], dtype=np.float32),
+        # f32-tiny noise across the whole tensor
+        rng.standard_normal((64, 256)).astype(np.float32) * 1e-38,
+        # magnitudes spanning denormal..f16-scale-overflow
+        rng.standard_normal((64, 256)).astype(np.float32)
+        * np.logspace(-45, 7, 64, dtype=np.float32)[:, None],
+        np.zeros((4, 32), dtype=np.float32),  # all-zero (already pinned, cheap guard)
+    )
+    for arr in cases:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # ANY RuntimeWarning fails the test
+            raw = quantize_q8_0(arr)
+        oracle = np.asarray(oracle_quantize(arr, GGMLQuantizationType.Q8_0),
+                            dtype=np.uint8).tobytes()
+        assert raw == oracle
+
+    # Explicit semantic pin: denormal-block codes are 0 and the f16 scale is
+    # +0.0 (NOT -127 codes) — the exact bytes the user's run got wrong.
+    den = np.zeros((1, 32), dtype=np.float32)
+    den[0, 0] = 1e-40
+    raw = quantize_q8_0(den)
+    blk = np.frombuffer(raw, dtype=np.uint8).reshape(Q8_0_BLOCK_BYTES)
+    assert blk[0:2].view("<f2")[0] == 0.0
+    assert (blk[2:].view(np.int8) == 0).all()
+
+
+def test_q8_0_inf_nan_inputs_oracle_exact():
+    """inf/NaN block values follow the same NaN->0 path as the oracle
+    (np_roundf NaN-poisons them; codes 0). Warning-free too. Skipped when
+    gguf-py is absent (gate venv)."""
+    import warnings
+
+    pytest.importorskip("gguf")
+    from gguf import GGMLQuantizationType
+    from gguf.quants import quantize as oracle_quantize
+
+    cases = (
+        np.array([[np.inf] * 32, [1.0] * 32], dtype=np.float32),
+        np.array([[np.nan] * 32, [1.0] * 32], dtype=np.float32),
+        np.array([[np.inf, np.nan, -np.inf] + [1.0] * 29], dtype=np.float32),
+    )
+    for arr in cases:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            raw = quantize_q8_0(arr)
+        oracle = np.asarray(oracle_quantize(arr, GGMLQuantizationType.Q8_0),
+                            dtype=np.uint8).tobytes()
+        assert raw == oracle
+
+
+def test_q8_0_f16_scale_overflow_matches_oracle():
+    """maxabs > ~8.3e6 -> d overflows the f16 STORE to +inf with codes at
+    the clip boundary — exactly what the oracle produces (probed 2026-09-09:
+    codes 127, d inf). Warning-free (the f16 store overflow is silenced).
+    Skipped when gguf-py is absent (gate venv)."""
+    import warnings
+
+    pytest.importorskip("gguf")
+    from gguf import GGMLQuantizationType
+    from gguf.quants import quantize as oracle_quantize
+
+    arr = np.full((2, 32), 1e7, dtype=np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        raw = quantize_q8_0(arr)
+    oracle = np.asarray(oracle_quantize(arr, GGMLQuantizationType.Q8_0),
+                        dtype=np.uint8).tobytes()
+    assert raw == oracle
+    blk = np.frombuffer(raw, dtype=np.uint8).reshape(2, Q8_0_BLOCK_BYTES)
+    assert blk[0, 0:2].view("<f2")[0] == np.inf
+    assert (blk[0, 2:].view(np.int8) == 127).all()
+
+
 # --------------------------------------------------------------- Q4_0 ----- #
 def test_q4_0_golden_bit_exact():
     """Case B reproduces the oracle bytes (zero block stores d = -0.0)."""

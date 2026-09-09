@@ -58,27 +58,66 @@ def _f16_le(value: np.floating | np.ndarray) -> bytes:
 def quantize_q8_0(arr: np.ndarray) -> bytes:
     """Quantize f32 -> Q8_0 block bytes (llama.cpp-exact, golden-pinned).
 
-    Rounding is HALF-AWAY-FROM-ZERO on ``x * (1/d)`` with an f32 reciprocal —
-    exactly what llama.cpp's ``roundf(x * id)`` does (quantui-rs mirrors it).
-    numpy ``rint`` (ties-to-even) + true division flips ~0.1-0.5% of
-    boundary codes by +-1 vs the reference; audibly measurable in
-    voice-cloning quality, so bit-parity matters here (fixed 2026-09-08,
-    found by full-byte diff vs the user's quantui-rs VibeVoice oracle).
+    Rounding follows the gguf-py oracle's ``np_roundf`` formula VERBATIM —
+    half-away-from-zero on ``x * (1/d)`` with an f32 reciprocal, exactly
+    what llama.cpp's ``roundf(x * id)`` does. numpy ``rint`` (ties-to-even)
+    + true division flips ~0.1-0.5% of boundary codes by +-1 vs the
+    reference; audibly measurable in voice-cloning quality, so bit-parity
+    matters here (fixed 2026-09-08, found by full-byte diff vs the user's
+    quantui-rs VibeVoice oracle).
+
+    Denormal/inf/nan semantics (fixed 2026-09-09, user report
+    VibeVoice-ASR-HF): blocks whose maxabs is a tiny denormal make ``1/d``
+    overflow to +inf, so products are +-inf/NaN. The (a - floored) roundf
+    shape NaN-poisons +-inf exactly like the oracle, NaN maps to code 0
+    (matching the oracle's f32->int8 NaN cast) and the ~1e-43 scale stores
+    as f16 +0.0 — dequantized values agree, bytes are identical. See the
+    inline comment block for the full derivation.
     """
     _check_ne0(arr, Q8_0_BLOCK_ELEMS, "quantize_q8_0")
     blocks = _blocks_of(arr, Q8_0_BLOCK_ELEMS)
     maxabs = np.max(np.abs(blocks), axis=1)  # (n_blocks,) f32
     d = (maxabs / 127.0).astype(np.float32)
-    with np.errstate(divide="ignore"):
+    # DENORMAL-MAXABS BLOCKS (user report 2026-09-09, VibeVoice-ASR-HF):
+    # maxabs tiny-but-nonzero (e.g. 1e-40 zero-init noise) -> d ~ 1e-43 and
+    # 1/d overflows to +inf, so every product is NaN. The gguf-py oracle's
+    # NaN -> int cast lands on 0 (its np_roundf keeps NaN through sign/floor,
+    # and the f32->int8 cast of NaN yields 0 on this platform); a naive
+    # f32->int32 cast yields INT_MIN which clipped to -127 — WRONG codes.
+    # Map NaN -> 0 explicitly BEFORE any int cast (deterministic on every
+    # platform), byte-identical to the oracle. The f16 store of the ~1e-43
+    # scale underflows to +0.0 exactly like the oracle, so dequantized
+    # values agree too. inf/nan INPUTS hit the same NaN path (oracle: 0s).
+    # FP warnings are silenced: overflow/invalid are expected on these
+    # paths and every outcome is handled explicitly below.
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
         inv = np.where(maxabs == 0, np.float32(0), np.float32(1.0) / d)
-    prod = blocks * inv[:, None]
-    # half-away-from-zero: sign * floor(|v| + 0.5); == llama.cpp roundf()
-    q = (np.sign(prod) * np.floor(np.abs(prod) + 0.5)).astype(np.int32)
-    q = np.clip(q, -127, 127).astype(np.int8)
+        prod = blocks * inv[:, None]
+        # gguf-py ``np_roundf`` VERBATIM (half-away-from-zero for finite
+        # values, == llama.cpp roundf). The (a - floored) shape is NOT
+        # cosmetic: for prod = +-inf (denormal-scale blocks, see above) it
+        # NaN-poisons (inf - inf = NaN), so the oracle's codes are 0 — a
+        # floor(|v|+0.5) formulation would keep +-inf finite and clip to
+        # +-127 instead (WRONG bytes; found by oracle diff 2026-09-09).
+        a = np.abs(prod)
+        floored = np.floor(a)
+        qf = np.sign(prod) * (floored + np.floor(np.float32(2) * (a - floored)))
+    # NaN (denormal/inf/nan blocks AND +-inf products) -> 0 before any int
+    # cast: the oracle's f32->int8 NaN cast lands on 0 on this platform and
+    # the dequantized values agree (the f16 scale flushes to 0 there anyway).
+    # NaN->0 must precede the cast (an int cast of NaN would warn and, via
+    # int32, wrap to INT_MIN -> wrong codes).
+    qf = np.where(np.isnan(qf), np.float32(0), qf)
+    # Clip in FLOAT space before the cast so any residual huge finite value
+    # saturates without an int-cast overflow warning (127.0 representable).
+    q = np.clip(qf, np.float32(-127), np.float32(127)).astype(np.int32).astype(np.int8)
     q[maxabs == 0] = 0
     out = bytearray()
     for i in range(q.shape[0]):
-        out += _f16_le(np.float16(d[i]))
+        # d > 65504 (maxabs > ~8.3e6) overflows f16 -> inf — exactly what the
+        # oracle stores (verified: codes 127, d inf); the warning is noise.
+        with np.errstate(over="ignore"):
+            out += _f16_le(np.float16(d[i]))
         out += q[i].tobytes()
     return bytes(out)
 
