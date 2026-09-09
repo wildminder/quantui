@@ -427,3 +427,56 @@ async def test_buttons_only_in_done_mode(tmp_path, monkeypatch):
         btns = a.query_one("#result_buttons")
         if btns.display:  # success record -> buttons visible in done mode
             assert a.query_one("#footer_left").display is False
+
+
+async def test_close_button_hides_done_footer(tmp_path, monkeypatch):
+    """[Close ✕] on the done-mode card hides the whole run footer (user request
+    2026-09-09); the next run re-reveals it via _show_run_footer."""
+    from quantui import profiles_store as ps
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import FakeRunner, _gguf_cfg
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=0)
+
+        a.action_run()
+        await a.workers.wait_for_complete()
+        await _wait_until(
+            lambda: a.query_one("#footer_left").display is False, pilot)
+        # Done mode: the Close button is on the card's button row.
+        close_btn = a.query_one("#close_footer")
+        assert close_btn.display is True
+
+        # Click it -> the whole footer hides. (pilot.click is intercepted by
+        # the completion toast at this screen position; pressing the Button
+        # directly exercises the identical Button.Pressed dispatch path.)
+        from textual.widgets import Button
+
+        a.query_one("#close_footer", Button).press()
+        await pilot.pause()
+        assert a.query_one("#run_footer").display is False
+
+        # A new run re-reveals the footer (progress mode, bar reset).
+        a._show_run_footer()
+        await pilot.pause()
+        assert a.query_one("#run_footer").display is True
+        assert a.query_one("#footer_left").display is True
+
+
+async def test_close_button_posts_message_only(tmp_path, monkeypatch):
+    """The Close button dispatches through ResultsCard.CloseRequested (message,
+    not a direct display mutation in the card) — the APP owns footer visibility."""
+    from quantui.widgets_results import ResultsCard
+
+    card = ResultsCard()
+    assert hasattr(ResultsCard, "CloseRequested")
+    assert hasattr(card, "on_button_pressed")
+    # The dispatch branch exists in the card's handler source (tripwire-ish pin).
+    import inspect
+
+    src = inspect.getsource(ResultsCard.on_button_pressed)
+    assert "CLOSE_FOOTER" in src and "CloseRequested" in src

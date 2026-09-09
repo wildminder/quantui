@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **[Close ✕] button on the done-mode results card** (user request
+  2026-09-09): hides the whole run footer after a finished quantization.
+  The next run re-reveals it automatically.
 - **BlockBar widget** (`quantui/widgets_progress.py`, plan
   2026-09-09-control-panel S1.2): a chunky multi-row progress bar that fills
   its entire widget area with █/░ blocks — the native ProgressBar renders a

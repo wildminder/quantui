@@ -41,6 +41,7 @@ RESULT_PATH = "#result_path"
 RESULT_META = "#result_meta"
 COPY_OUT_PATH = "#copy_out_path"
 OPEN_OUT_FOLDER = "#open_out_folder"
+CLOSE_FOOTER = "#close_footer"
 
 # .pt -> .safetensors converter (user feature): a suggestion box shown in the
 # ComfyUI panel when #ctq_input points at a PyTorch checkpoint (.pt/.pth/.ckpt).
@@ -89,6 +90,7 @@ def all_ids() -> tuple[str, ...]:
         RESULT_META,
         COPY_OUT_PATH,
         OPEN_OUT_FOLDER,
+        CLOSE_FOOTER,
         PT_SUGGEST,
         PT_CONVERT_BTN,
         IMATRIX_PATH,

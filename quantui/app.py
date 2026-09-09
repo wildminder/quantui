@@ -650,6 +650,18 @@ class QuantApp(
             # a true environment boundary; surface it to the user instead.
             self.emit_toast("No file manager available to open the folder.", "warning")
 
+    def on_results_card_close_requested(self, event) -> None:
+        """[Close ✕] on the ResultsCard: hide the run footer until the next run.
+
+        The footer is only ever visible in done mode when this fires (the button
+        lives on the card), so hiding the whole footer is exactly "dismiss the
+        results panel". The next run re-reveals it via _show_run_footer.
+        """
+        try:
+            self.query_one(ids.RUN_FOOTER).display = False
+        except NoMatches:
+            pass  # footer not mounted yet (headless partial UI)
+
     # ---- S2.4: profiles / form state ------------------------------------------
     # IMP-006: the profile snapshot/apply + method-info + ctq-visibility +
     # preset cluster moved verbatim to quantui/form_state.py (FormStateMixin);
