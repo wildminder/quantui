@@ -17,6 +17,6 @@ from .quant_methods import (
 
 # NTH-006: single source of truth for the semantic version. Bumped only via
 # ``scripts/bump_version.py {major|minor|patch}`` (which also rotates CHANGELOG.md).
-__version__ = "0.10.1"
+__version__ = "0.10.2"
 
 __all__ = ["Family", "METHODS", "METHODS_BY_ID", "COMFY_FORMATS", "__version__"]
