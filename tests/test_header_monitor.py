@@ -37,17 +37,16 @@ async def test_progress_drives_footer_only(tmp_path, monkeypatch):
                 f"[00:00<?, ?it/s, loss=0.{i}]"
             )
         await pilot.pause()
-        from textual.widgets import ProgressBar
-
         from quantui.panels import RunFooter
+        from quantui.widgets_progress import BlockBar
 
         footer = a.query_one("#run_footer", RunFooter)
-        footer_bar = footer.query_one("#footer_bar", ProgressBar)
+        footer_bar = footer.query_one("#footer_bar", BlockBar)
         assert footer_bar.progress > 0
         # Single-surface invariant: the footer bar is the ONLY visible bar.
         visible = [
             b
-            for b in a.query("ProgressBar")
+            for b in a.query(BlockBar)
             if b.display and b.region.width > 0 and b.region.height > 0
         ]
         assert visible == [footer_bar]

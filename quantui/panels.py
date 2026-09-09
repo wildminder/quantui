@@ -23,7 +23,6 @@ from textual.widgets import (
     Collapsible,
     Input,
     Label,
-    ProgressBar,
     RadioButton,
     RadioSet,
     RichLog,
@@ -38,6 +37,7 @@ from .quant_methods import (
     format_options,
     preset_options,
 )
+from .widgets_progress import BlockBar
 
 # --- derived constants (source of truth is quant_methods) ---------------------
 # T8 (plan 2026-08-31-gguf-unsloth-parity): the (label, id) pairs are gone --
@@ -193,10 +193,11 @@ class RunFooter(Horizontal):
         from .widgets_results import _build_results_card_shared
 
         with Vertical(id="footer_left"):
-            # The ONE progress bar. show_percentage=False: the stats line right
-            # below renders the pct (a separate PercentageStatus sub-widget
-            # overlapped the stats line otherwise).
-            yield ProgressBar(id="footer_bar", show_percentage=False, show_eta=False)
+            # The ONE progress bar. S1.3 (plan 2026-09-09-control-panel): the
+            # native ProgressBar (a pinned 32-cell 1-row strip) is replaced by
+            # the chunky BlockBar — full width via CSS, 3 rows of blocks. The
+            # stats line below still renders the pct textually.
+            yield BlockBar(total=100, rows=3, id="footer_bar")
             yield Label("--", id="footer_stats")
             yield ProgressRail(id="progress_rail")
             yield Label(id="status")

@@ -14,6 +14,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `progress` alias so the run footer can swap it in without touching callers.
 
 ### Changed
+- **Full-width chunky footer progress bar** (plan 2026-09-09-control-panel
+  S1.3): the run footer's aggregate bar is now the 3-row BlockBar spanning
+  the panel width (was a 32-cell single-line strip inside a ~117-wide
+  widget). `#footer_bar` keeps its id and `update(progress=)` contract, so
+  stats/hold behavior is unchanged.
 - **Palette v2 "control room slate"** (plan 2026-09-09-control-panel S1.1):
   the deep-space near-black stack (~4-12% luminance) is replaced by a
   professional slate/navy ramp (14-26%), the electric-cyan primary softens to
