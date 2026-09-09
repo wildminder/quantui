@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- **Palette v2 "control room slate"** (plan 2026-09-09-control-panel S1.1):
+  the deep-space near-black stack (~4-12% luminance) is replaced by a
+  professional slate/navy ramp (14-26%), the electric-cyan primary softens to
+  steel cyan, and the magenta accent becomes a muted violet. A permanent
+  no-near-black guard pins every surface at >= 12% luminance.
+
 ## [0.10.1] - 2026-09-09
 
 ### Changed

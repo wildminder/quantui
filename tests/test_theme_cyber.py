@@ -24,13 +24,47 @@ def test_title_is_class_constant():
 
 
 def test_theme_builder_values_pinned():
-    """The pure builder returns the exact sci-fi palette (catches accidental retunes)."""
+    """The pure builder returns the exact control-room slate palette (plan
+    2026-09-09-control-panel S1.1) — catches accidental retunes."""
     t = build_cyber_theme()
     assert t.name == "quantui-cyber"
-    assert t.primary == "#00e5ff"
-    assert t.accent == "#ff2d95"
-    assert t.background == "#050b14"
+    assert t.primary == "#4dc3ff"  # steel cyan
+    assert t.secondary == "#7c4dff"
+    assert t.accent == "#c792ea"  # soft violet
+    assert t.success == "#5fd7a0"
+    assert t.warning == "#e5c07b"
+    assert t.error == "#e06c75"
+    assert t.background == "#1c2536"
+    assert t.surface == "#253246"
+    assert t.panel == "#2d3a51"
+    assert t.boost == "#35435c"
     assert t.dark is True
+
+
+def _luminance(hex_color: str) -> float:
+    """Perceived luminance 0..1 of a '#rrggbb' string (simple rec. 601 weights)."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+
+
+def test_no_near_black():
+    """Plan S1.1 guard: every base surface stays readable (luminance >= 0.12).
+
+    The v0.10 palette's deep-space stack (~4-12% luminance) read as near-black
+    against white SVG chrome — the whole point of palette v2 is to fix that,
+    so this pins the floor permanently for background/surface/panel/boost.
+    """
+    t = build_cyber_theme()
+    surfaces = {
+        "background": t.background,
+        "surface": t.surface,
+        "panel": t.panel,
+        "boost": t.boost,
+    }
+    for name, hex_color in surfaces.items():
+        lum = _luminance(hex_color)
+        assert lum >= 0.12, f"{name}={hex_color} luminance {lum:.3f} < 0.12 (near-black)"
 
 
 async def test_theme_registered_on_app(tmp_path, monkeypatch):
@@ -40,7 +74,7 @@ async def test_theme_registered_on_app(tmp_path, monkeypatch):
     async with a.run_test():
         theme = a.get_theme("quantui-cyber")
         assert theme is not None
-        assert theme.primary == "#00e5ff"
+        assert theme.primary == "#4dc3ff"
 
 
 async def test_app_defaults_to_cyber(tmp_path, monkeypatch):
@@ -118,4 +152,4 @@ async def test_theme_and_title_survive_repeated_boot(tmp_path, monkeypatch):
         async with a.run_test():
             assert a.theme == "quantui-cyber"
             assert a.title == "QuantUI"
-            assert a.get_theme("quantui-cyber").primary == "#00e5ff"
+            assert a.get_theme("quantui-cyber").primary == "#4dc3ff"
