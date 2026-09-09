@@ -109,11 +109,11 @@ def test_header_progress_holds_value_across_log_line_clears():
         a = _make_app()
         async with a.run_test() as pilot:
             await pilot.pause()
-            from textual.widgets import ProgressBar
+            from quantui.widgets_progress import BlockBar
 
             a._show_run_footer()  # footer must be visible for the bar to exist
             await pilot.pause()
-            bar = a.query_one("#footer_bar", ProgressBar)
+            bar = a.query_one("#footer_bar", BlockBar)
             # A structured progress frame sets 40%.
             a._live.update('CTQ_PROGRESS {"phase":"quantize","cur":40,"total":100}')
             a.update_progress(a._live.states())

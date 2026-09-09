@@ -427,7 +427,7 @@ class QuantApp(
         boundaries (``_show_run_footer``).
         """
         try:
-            from textual.widgets import ProgressBar as _PB
+            from quantui.widgets_progress import BlockBar as _PB
 
             bar = self.query_one("#footer_bar", _PB)
             stats_lbl = self.query_one("#footer_stats", Label)
@@ -892,7 +892,7 @@ class QuantApp(
         # reset AND the widget itself — a previous run's fill must not linger).
         self._footer_hold.reset()
         try:
-            from textual.widgets import ProgressBar as _PB
+            from quantui.widgets_progress import BlockBar as _PB
 
             self.query_one("#footer_bar", _PB).update(total=100, progress=0)
             self.query_one("#footer_stats", Label).update("--")

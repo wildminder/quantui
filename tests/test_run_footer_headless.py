@@ -11,6 +11,7 @@ from textual.widgets import Label
 from quantui import app as appmod
 from quantui import ids, panels
 from quantui.app_css import MAIN_CSS
+from quantui.widgets_progress import BlockBar
 from quantui.widgets_results import ResultsCard
 
 
@@ -33,9 +34,8 @@ async def test_footer_holds_rail_status_results():
         left = footer.query_one("#footer_left", Vertical)
         assert left.query_one("#progress_rail") is not None
         assert left.query_one("#status") is not None
-        from textual.widgets import ProgressBar
-
-        bar = footer.query_one("#footer_bar", ProgressBar)
+        # S1.3 (plan 2026-09-09-control-panel): the bar is the chunky BlockBar.
+        bar = footer.query_one("#footer_bar", BlockBar)
         assert bar.display is True
         assert footer.query_one("#footer_stats", Label) is not None
         card = footer.query_one(ResultsCard)
@@ -270,10 +270,8 @@ async def test_footer_bar_tracks_progress(tmp_path, monkeypatch):
         await pilot.pause()
         a.log_msg(_envelope("quantize", 2600, 4000, "Optimizing INT8"))
         await pilot.pause()
-        from textual.widgets import ProgressBar
-
         footer = a.query_one("#run_footer", panels.RunFooter)
-        bar = footer.query_one("#footer_bar", ProgressBar)
+        bar = footer.query_one("#footer_bar", BlockBar)
         stats = str(footer.query_one("#footer_stats", Label).content)
         assert bar.progress == 65  # 2600/4000
         assert "65" in stats
@@ -291,15 +289,47 @@ async def test_footer_bar_monotonic_like_header(tmp_path, monkeypatch):
         await pilot.pause()
         a.log_msg(_envelope("quantize", 3000, 4000, "Optimizing INT8"))  # 75%
         await pilot.pause()
-        from textual.widgets import ProgressBar
-
         footer = a.query_one("#run_footer", panels.RunFooter)
-        bar = footer.query_one("#footer_bar", ProgressBar)
+        bar = footer.query_one("#footer_bar", BlockBar)
         assert bar.progress == 75
         # A plain log line clears the live store (header-hold semantics).
         a.log_msg("some ordinary log line without progress data")
         await pilot.pause()
         assert bar.progress == 75, "footer bar must hold, not reset"
+
+
+# ---- S1.3 (plan 2026-09-09-control-panel): chunky full-width bar ----------------
+
+
+async def test_footer_bar_fills_width(tmp_path, monkeypatch):
+    """The bar must actually fill the footer panel width — the original
+    complaint was a 32-cell strip lost inside a ~117-wide panel."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test(size=(120, 40)) as pilot:
+        a._show_run_footer()
+        a._run_start_ts = 1.0
+        await pilot.pause()
+        a.log_msg(_envelope("quantize", 2600, 4000, "Optimizing INT8"))
+        await pilot.pause()
+        bar = a.query_one("#footer_bar", BlockBar)
+        assert bar.region.width > 50, (
+            f"bar region width {bar.region.width} at 120-col terminal — "
+            "still a narrow strip, not a full-width readout"
+        )
+
+
+async def test_footer_bar_is_three_rows(tmp_path, monkeypatch):
+    """The bar renders 3 block rows (chunky control-panel readout, not 1 line)."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test(size=(120, 40)) as pilot:
+        a._show_run_footer()
+        await pilot.pause()
+        bar = a.query_one("#footer_bar", BlockBar)
+        assert bar.region.height == 3, (
+            f"bar region height {bar.region.height} — CSS height: 3 missing"
+        )
 
 
 async def test_footer_updates_status_line():

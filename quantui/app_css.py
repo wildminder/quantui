@@ -17,7 +17,7 @@ MAIN_CSS = """
     # F2-S1.2 (plan 2026-09-08-footer-v2): two-state footer. Done mode hides the
     # left panel via display toggling and stretches the card to full width.
     #run_footer.mode-done > #results_card { width: 100%; }
-    #footer_bar { width: 1fr; }
+    #footer_bar { width: 1fr; height: 3; margin-bottom: 1; }
     #footer_stats { height: 1; margin-top: 0; text-style: none; color: $text-muted; }
     .field { height: auto; }
     .field Input { width: 1fr; }
