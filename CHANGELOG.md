@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Fixed
+- **Crash when clicking a progress-rail row during quantization** (user
+  report): the footer rail's click handler read `event.target`, which no
+  longer exists on Textual 8.2.8 click events (`AttributeError: 'Click'
+  object has no attribute 'target'`). Reads `event.widget` instead — clicks
+  on a phase chip (or anywhere on its row) again open the log drawer
+  filtered to that phase.
+
 ## [0.10.2] - 2026-09-09
 
 ### Added
