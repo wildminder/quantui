@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [0.10.5] - 2026-09-09
 
+### Fixed
+- **Q8_0 denormal blocks: wrong codes + RuntimeWarnings** (user report,
+  VibeVoice-ASR-HF `native_q8_0`): blocks whose max |value| is a tiny
+  denormal (~1e-40 zero-init noise) made `1/d` overflow to inf, so every
+  product was NaN — the kernel emitted `-127` codes (NaN → int32 wrapped
+  to INT_MIN) where the llama.cpp reference writes 0, and spammed
+  overflow/invalid RuntimeWarnings. Rounding now follows gguf-py's
+  `np_roundf` verbatim (its `(a - floored)` shape NaN-poisons ±inf), NaN
+  maps to code 0 explicitly, and the expected-FP paths are errstate-
+  silenced. Verified byte-identical AND warning-free against the live
+  gguf-py oracle on denormal / sparse / logspace-sweep / zero / inf / nan
+  inputs; Q4_0 unaffected (its clip absorbs the case).
+
 ## [0.10.4] - 2026-09-09
 
 ### Added
