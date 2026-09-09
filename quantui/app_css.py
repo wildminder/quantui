@@ -10,7 +10,7 @@ MAIN_CSS = """
     #params { width: 100%; height: 1fr; padding: 1 2; }
     # Run footer (plan 2026-09-08-run-footer): the master style — hidden until a
     # run starts (QuantApp._show_run_footer flips display on).
-    #run_footer { height: auto; max-height: 16; display: none; padding: 0 1;
+    #run_footer { height: auto; max-height: 25; display: none; padding: 0 1;
                  border-top: solid $panel-darken-1; background: $surface-darken-1; }
     #run_footer > #footer_left { width: 1fr; height: auto; padding: 0 1 0 0; }
     #run_footer > #results_card { width: 50; margin-top: 0; }
@@ -18,7 +18,20 @@ MAIN_CSS = """
     # left panel via display toggling and stretches the card to full width.
     #run_footer.mode-done > #results_card { width: 100%; }
     #footer_bar { width: 1fr; height: 3; margin-bottom: 1; }
-    #footer_stats { height: 1; margin-top: 0; text-style: none; color: $text-muted; }
+    # Stats line as a boxed readout (plan 2026-09-09-control-panel S2.2):
+    # round panel border + surface fill. The explicit height: 3 matters — a
+    # border box at height 2 spends BOTH rows on the border and clips its text.
+    #footer_stats { border: round $panel; background: $surface; padding: 0 1;
+                   height: 3; margin-top: 0; text-style: none; color: $text-muted; }
+    # Phase chips as pills (S2.2): the rail row grows to the 3-row box
+    # (height: auto — the old fixed 1 clipped the border), the label hugs its
+    # text with a max-width cap so long labels fill the row instead of
+    # overflowing it.
+    .rail_row { height: auto; }
+    .rail_label { border: round $panel; background: $surface; padding: 0 1;
+                  height: 3; width: auto; max-width: 100%; }
+    # Radio buttons keep a readable, theme-driven label color (S2.2).
+    RadioSet > RadioButton { color: $text; }
     .field { height: auto; }
     .field Input { width: 1fr; }
     .field Button { width: auto; }
