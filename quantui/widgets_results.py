@@ -95,6 +95,7 @@ class ResultsCard(Vertical):
         yield Horizontal(
             Button("Copy path", id=ids.COPY_OUT_PATH.lstrip("#"), variant="default"),
             Button("Open folder", id=ids.OPEN_OUT_FOLDER.lstrip("#"), variant="default"),
+            Button("Close ✕", id=ids.CLOSE_FOOTER.lstrip("#"), variant="default"),
             id=ids.RESULT_BUTTONS.lstrip("#"),
             classes="log_buttons",
         )
@@ -184,10 +185,15 @@ class ResultsCard(Vertical):
             super().__init__()
             self.folder = folder
 
+    class CloseRequested(Message):
+        """Posted when the user clicks [Close ✕]: the app hides the run footer."""
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
         path = self.output_path
-        if bid == ids.COPY_OUT_PATH.lstrip("#"):
+        if bid == ids.CLOSE_FOOTER.lstrip("#"):
+            self.post_message(self.CloseRequested())
+        elif bid == ids.COPY_OUT_PATH.lstrip("#"):
             if path:
                 self.app.copy_to_clipboard(path)
                 self.notify("Output path copied.")
