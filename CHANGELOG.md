@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-09-09
+
 ### Fixed
 - **Crash when clicking a progress-rail row during quantization** (user
   report): the footer rail's click handler read `event.target`, which no
