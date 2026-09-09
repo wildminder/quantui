@@ -113,8 +113,8 @@ class ProgressRail(Vertical):
 
     DEFAULT_CSS = """
     ProgressRail { height: auto; }
-    ProgressRail .rail_label { height: 1; margin-top: 0; text-style: none;
-                               width: 1fr; color: $text-muted; }
+    ProgressRail .rail_label { margin-top: 0; text-style: none;
+                               color: $text-muted; }
     ProgressRail .rail_more { height: 1; margin-top: 0; text-style: none;
                               color: $text-disabled; }
     """
