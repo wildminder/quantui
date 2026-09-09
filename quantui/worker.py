@@ -319,8 +319,11 @@ def _run_native_backend(args) -> None:
     out_path = os.path.join(out_dir, f"{base}-{method}.gguf")
 
     def _progress(done, total, name):
-        progress("quantize", pct=99.0 * done / max(total, 1),
-                 label=f"Exporting GGUF ({method}) {done}/{total}")
+        # Counts go in cur/total (the stats line renders them as [cur/total]);
+        # embedding them in the label duplicated the text in the footer.
+        progress("quantize", cur=done, total=total,
+                 pct=99.0 * done / max(total, 1),
+                 label=f"Exporting GGUF ({method})")
 
     log(f"Native GGUF export: {model_path} -> {out_path} ({method})")
     try:

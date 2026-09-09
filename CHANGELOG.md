@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Added
+- **[Close ✕] on interrupted runs** (user request 2026-09-09): the close
+  toggle moved to its own always-available row (`#footer_close_row`) on the
+  results card — stopped AND failed runs can now dismiss the footer, not
+  just successful ones. Copy/Open stay success-gated.
+
+### Removed
+- **Per-phase progress rail** (user request 2026-09-09): the chip rows under
+  the footer bar duplicated the stats line's counts AND opened the log
+  drawer when clicked — both rejected. The aggregate bar (#footer_bar) +
+  boxed stats line (#footer_stats) are the single progress surface; the
+  Esc keybinding and the phase-filter machinery died with the rail.
+
+### Fixed
+- **Native GGUF export label** no longer embeds the counts
+  (`Exporting GGUF (native_q4_0) 621/1204`): cur/total now travel as real
+  fields and render once, in the stats line (`Exporting GGUF (native_q4_0)
+  [621/1204]`).
+
 ## [0.10.3] - 2026-09-09
 
 ### Fixed

@@ -30,10 +30,6 @@ CAP_WARN = "#ctq_cap_warn"
 LOG = "#log"
 LOG_DRAWER = "#log_drawer"
 
-# Stacked progress rail (S1.8) -- replaced the single #live_progress widget,
-# which was DELETED in the same commit as this constant (plan Q4c).
-PROGRESS_RAIL = "#progress_rail"
-
 # Results card (S2.2/S2.3) ------------------------------------------------------
 RESULTS_CARD = "#results_card"
 RESULT_OUTCOME = "#result_outcome"
@@ -58,11 +54,15 @@ UD_FOOTER = "#ud_footer"
 PICK_METHOD = "#pick_method"
 
 # Run footer (plan 2026-09-08-run-footer, layout v2) -- full-width bottom bar
-# holding the former rail widgets (#progress_rail / #status / #results_card).
-# Hidden until a run starts; RESULT_BUTTONS gates Copy/Open to success only.
+# holding the former rail widgets (#status / #results_card). Hidden until a
+# run starts; RESULT_BUTTONS gates Copy/Open to success only. The per-phase
+# #progress_rail was removed 2026-09-09 (user request): it duplicated the
+# stats line and clicking it opened the log drawer. FOOTER_CLOSE_ROW holds
+# the always-available [Close ✕] button (works on interrupted runs too).
 RUN_FOOTER = "#run_footer"
 FOOTER_LEFT = "#footer_left"
 RESULT_BUTTONS = "#result_buttons"
+FOOTER_CLOSE_ROW = "#footer_close_row"
 
 
 def all_ids() -> tuple[str, ...]:
@@ -83,7 +83,6 @@ def all_ids() -> tuple[str, ...]:
         STATUS,
         CAP_WARN,
         LOG_DRAWER,
-        PROGRESS_RAIL,
         RESULTS_CARD,
         RESULT_OUTCOME,
         RESULT_PATH,
@@ -100,4 +99,5 @@ def all_ids() -> tuple[str, ...]:
         RUN_FOOTER,
         FOOTER_LEFT,
         RESULT_BUTTONS,
+        FOOTER_CLOSE_ROW,
     )

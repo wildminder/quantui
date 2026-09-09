@@ -589,8 +589,15 @@ async def test_log_msg_collapses_progress_lines(tmp_path, monkeypatch):
         await pilot.pause()
         # No progress line reaches the RichLog (no flood).
         assert len(a.query_one(RichLog).lines) == 0
-        # They are collapsed into the stacked progress rail, keeping only the latest update.
-        assert a.query_one("#progress_rail").display is True
+        # Progress frames are collapsed into the live store (the footer's
+        # aggregate bar + stats line render them; 2026-09-09: no rail rows).
+        from textual.css.query import NoMatches
+
+        try:
+            a.query_one("#progress_rail")
+            raise AssertionError("#progress_rail still mounted")
+        except NoMatches:
+            pass
         # The tqdm line is parsed into a REAL determinate state (not frozen raw text):
         # the latest frame (i=4 -> 40/4000) drives the bar.
         states = a._live.states()
@@ -611,9 +618,14 @@ async def test_log_msg_progress_cleared_on_real_line(tmp_path, monkeypatch):
     async with a.run_test() as pilot:
         a.log_msg("Optimizing INT8 (x):   0%|          | 0/4000 [00:00<?, ?it/s]")
         await pilot.pause()
-        # The rail is always mounted (display is never toggled) so the layout
-        # doesn't jump when progress appears.
-        assert a.query_one("#progress_rail").display is True
+        # The rail is gone (2026-09-09): progress renders in the footer only.
+        from textual.css.query import NoMatches
+
+        try:
+            a.query_one("#progress_rail")
+            raise AssertionError("#progress_rail still mounted")
+        except NoMatches:
+            pass
         # The tqdm line is parsed into a REAL determinate state (cur/total), not raw text.
         states = a._live.states()
         assert len(states) == 1, states
@@ -625,7 +637,6 @@ async def test_log_msg_progress_cleared_on_real_line(tmp_path, monkeypatch):
         # widget mounted, and is written to the RichLog.
         a.log_msg("=== Quantization finished successfully ===")
         await pilot.pause()
-        assert a.query_one("#progress_rail").display is True  # still mounted -> no jump
         assert a._live.snapshot() == {}  # content cleared
         assert len(a.query_one(RichLog).lines) == 1
 

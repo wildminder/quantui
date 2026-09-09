@@ -47,130 +47,21 @@ DEFAULT_METHOD = DEFAULT_GGUF_METHOD
 DEFAULT_CTQ_FORMAT = COMFY_FORMATS[0].id  # fp8_e4m3
 
 
-class ProgressRailRow(Horizontal):
-    """One stacked row of the ProgressRail: a clickable phase-name chip (no counts).
-
-    F2 dedup round 2 (user report): the stats line (#footer_stats) already
-    renders every phase's counts; a row repeating "label [cur/total]" was pure
-    duplication. The row now shows ONLY the phase name — its remaining value
-    is the click-to-filter affordance (click -> log drawer filtered to this
-    phase, S1.9). The row fills its label in ``on_mount`` (a freshly
-    ``mount()``-ed row has no composed children yet, so callers must NOT
-    query into it before the mount completes).
-    """
-
-    DEFAULT_CSS = """
-    ProgressRailRow { height: 1; margin-bottom: 0; }
-    """
-
-    def __init__(self, st) -> None:
-        # NOTE: no widget id -- phase keys like "(#/211)" are not valid Textual ids.
-        super().__init__(classes="rail_row")
-        self.phase_key = st.phase
-        self._state = st
-
-    def compose(self) -> ComposeResult:
-        yield Label("", classes="rail_label")
-
-    def on_mount(self) -> None:
-        self.update_state(self._state)
-
-    def update_state(self, st) -> None:
-        """Fill the label from one ProgressState (phase name only).
-
-        Best-effort on freshly mounted rows: a row's children only exist after
-        its ``mount()`` completes, so a not-yet-composed row keeps ``_state``
-        and fills itself in ``on_mount`` instead.
-        """
-        self._state = st
-        try:
-            lbl = self.query_one(".rail_label", Label)
-        except NoMatches:
-            return  # children not composed yet; on_mount will fill it
-        # Counts live in the stats line; the chip shows just the phase name.
-        lbl.update(st.label or st.phase or st.text)
-
-
-class ProgressRail(Vertical):
-    """Stacked phase labels, one per collapsed progress state (plan S1.8).
-
-    Replaces the single ``#live_progress`` widget: every entry of
-    ``LiveProgressStore.states()`` renders as its own label row (max
-    ``MAX_ROWS`` visible; overflow collapses into a "+N more" label). Since
-    the footer-v2 redundancy fix the rows are label-only — the wide aggregate
-    bar (#footer_bar) is the single progress bar. Clicking a row posts
-    :class:`BarClicked` with the phase key.
-    """
-
-    MAX_ROWS = 4
-
-    class BarClicked(Message):
-        """Posted when the user clicks one progress row."""
-
-        def __init__(self, phase: str) -> None:
-            super().__init__()
-            self.phase = phase
-
-    DEFAULT_CSS = """
-    ProgressRail { height: auto; }
-    ProgressRail .rail_label { margin-top: 0; text-style: none;
-                               color: $text-muted; }
-    ProgressRail .rail_more { height: 1; margin-top: 0; text-style: none;
-                              color: $text-disabled; }
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        # Phase-keyed row registry (phases are not always valid widget ids).
-        self._rows: dict[str, ProgressRailRow] = {}
-
-    def set_states(self, states: list) -> None:
-        """Render one row per state (reconciled by phase key), max MAX_ROWS."""
-        shown = states[: self.MAX_ROWS]
-        seen: set[str] = set()
-        for st in shown:
-            seen.add(st.phase)
-            row = self._rows.get(st.phase)
-            if row is None:
-                row = ProgressRailRow(st)
-                self._rows[st.phase] = row
-                self.mount(row)  # row fills itself in on_mount
-            else:
-                row.update_state(st)
-        # Remove stale rows (phases no longer present).
-        for key in [k for k in self._rows if k not in seen]:
-            self._rows.pop(key).remove()
-        # Overflow indicator.
-        for more in list(self.query(".rail_more")):
-            more.remove()
-        if len(states) > self.MAX_ROWS:
-            self.mount(
-                Label(f"+{len(states) - self.MAX_ROWS} more", classes="rail_more")
-            )
-
-    def on_click(self, event) -> None:
-        """Click any part of a row -> post BarClicked(phase)."""
-        # Textual 8.x MouseEvent carries the posted-to widget as ``.widget``
-        # (no ``.target`` — that attribute exists only in DOM-style event
-        # APIs). ``.widget`` is the chip Label for row clicks and the rail
-        # itself otherwise; the parent walk resolves Label -> row.
-        target = event.widget
-        while target is not None and not isinstance(target, ProgressRailRow):
-            target = target.parent
-        if isinstance(target, ProgressRailRow):
-            self.post_message(self.BarClicked(target.phase_key))
-
-
 class RunFooter(Horizontal):
     """Full-width run footer, TWO-MODE (plan 2026-09-08-footer-v2).
 
     Mode "progress" (while a run is active): the left panel (#footer_left)
-    shows the wide aggregate bar (#footer_bar), the stats line (#footer_stats),
-    the per-phase ProgressRail (#progress_rail) and the status Label (#status);
-    the ResultsCard is HIDDEN. Mode "done" (after _finish_run_record lands the
-    record): the ResultsCard REPLACES the progress panel entirely (full width)
-    so the verdict appears exactly once. Widget ids are the historical rail ids
-    (contract Q4a); master styling lives in MAIN_CSS (IMP-001 S3B.1).
+    shows the wide aggregate bar (#footer_bar), the stats line (#footer_stats)
+    and the status Label (#status); the ResultsCard is HIDDEN. Mode "done"
+    (after _finish_run_record lands the record): the ResultsCard REPLACES the
+    progress panel entirely (full width) so the verdict appears exactly once.
+    Widget ids are the historical rail ids (contract Q4a); master styling
+    lives in MAIN_CSS (IMP-001 S3B.1).
+
+    ProgressRail removal (user request 2026-09-09): the per-phase chip rows
+    were removed — they duplicated the stats line's counts AND clicking them
+    opened the log drawer (a behavior the user explicitly rejected). The
+    aggregate bar + boxed stats line are the single progress surface.
     """
 
     MODES = ("progress", "done")
@@ -200,10 +91,12 @@ class RunFooter(Horizontal):
             # The ONE progress bar. S1.3 (plan 2026-09-09-control-panel): the
             # native ProgressBar (a pinned 32-cell 1-row strip) is replaced by
             # the chunky BlockBar — full width via CSS, 3 rows of blocks. The
-            # stats line below still renders the pct textually.
+            # stats line below still renders the pct textually. The former
+            # per-phase ProgressRail rows are gone (user request 2026-09-09):
+            # they duplicated the stats line's counts and clicking them
+            # opened the log drawer.
             yield BlockBar(total=100, rows=3, id="footer_bar")
             yield Label("--", id="footer_stats")
-            yield ProgressRail(id="progress_rail")
             yield Label(id="status")
         yield _build_results_card_shared()
 
@@ -216,12 +109,13 @@ def build_main_layout(run_log_max_lines: int) -> Vertical:
     """The main body layout (plan 2026-09-08-run-footer, layout v2).
 
     #params (VerticalScroll) now spans the FULL width; the former right rail's
-    widgets (ProgressRail #progress_rail, status #status, ResultsCard) live in
-    the on-demand :class:`RunFooter` (#run_footer) stacked below it — hidden
-    until a run starts. Since S1.4 the log lives in :func:`build_log_drawer`
-    (hidden by default). All widget ids are preserved exactly (contract tests
-    stay green; the layout-tree pin in test_widget_contract.py was rewritten
-    for v2 in the same commit).
+    widgets (status #status, ResultsCard) live in the on-demand
+    :class:`RunFooter` (#run_footer) stacked below it — hidden until a run
+    starts. Since S1.4 the log lives in :func:`build_log_drawer` (hidden by
+    default). All widget ids are preserved exactly (contract tests stay green;
+    the layout-tree pin in test_widget_contract.py was rewritten for v2 in the
+    same commit). The per-phase ProgressRail was removed 2026-09-09 (user
+    request): it duplicated the stats line and opened the log drawer on click.
     """
     return Vertical(
         VerticalScroll(
