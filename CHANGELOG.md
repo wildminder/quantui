@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-09-09
+
 ### Added
 - **[Close ✕] button on the done-mode results card** (user request
   2026-09-09): hides the whole run footer after a finished quantization.
