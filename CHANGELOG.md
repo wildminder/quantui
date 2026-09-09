@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-09-09
+
 ### Added
 - **[Close ✕] on interrupted runs** (user request 2026-09-09): the close
   toggle moved to its own always-available row (`#footer_close_row`) on the
