@@ -1,17 +1,24 @@
-"""Headless tests for click-bar -> filtered log drawer (plan S1.9)."""
+"""Log-filter removal pins (user request 2026-09-09).
+
+The S1.9 phase filter (click a progress row -> drawer filtered to that phase)
+died with the ProgressRail: its only entry point was the rail click. Esc no
+longer clears a filter (there is none); the drawer shows the plain capped
+stream again. These tests pin the absence + the surviving drawer behavior.
+"""
 
 import json
+import os
 
 from textual.widgets import RichLog
 
 from quantui import app as appmod
 
+_QUANTUI_DIR = os.path.join(os.path.dirname(__file__), "..", "quantui")
 
-def _envelope(phase: str, cur: int, total: int, label: str) -> str:
-    return "CTQ_PROGRESS " + json.dumps(
-        {"phase": phase, "cur": cur, "total": total,
-         "pct": round(100 * cur / total, 1), "label": label}
-    )
+
+def _read(rel: str) -> str:
+    with open(os.path.join(_QUANTUI_DIR, rel), encoding="utf-8") as fh:
+        return fh.read()
 
 
 def _drawer_lines(a) -> list[str]:
@@ -19,75 +26,60 @@ def _drawer_lines(a) -> list[str]:
     return ["".join(str(seg) for seg in line) for line in log.lines]
 
 
-async def test_click_bar_opens_filtered_drawer(tmp_path, monkeypatch):
-    """Posting BarClicked('Optimizing INT8') opens the drawer and shows only
-    matching lines from the authoritative temp file."""
+def test_filter_source_tripwire():
+    """The filter state + Esc action are gone from app.py (docstring mentions
+    of the removal are allowed)."""
+    src = _read("app.py")
+    for needle in ("_apply_log_filter", "_log_filter = ", "clear_log_filter"):
+        assert needle not in src, f"app.py still contains {needle!r}"
+    # The escape binding must be gone from the keymap.
+    assert '"clear_log_filter"' not in _read("app.py")
+
+
+async def test_esc_no_longer_clears_any_filter(tmp_path, monkeypatch):
+    """Esc is unbound for filters; pressing it must not touch the drawer."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
-        # tqdm frames for the phase + unrelated detail lines.
-        for i in range(5):
-            a.log_msg(f"Optimizing INT8 (Prodigy-plateau):   {i}%|  | {i*10}/4000 "
-                      f"[00:00<?, ?it/s]")
-        a.log_msg("unrelated detail line")
-        await pilot.pause()
-
-        assert a.query_one("#log_drawer").display is False
-        # Click a rail row via the BarClicked message (the label term the plan
-        # names in its example; tqdm bars collapse into the 'quantize' slot).
-        from quantui.panels import ProgressRail
-        a.post_message(ProgressRail.BarClicked("Optimizing INT8"))
-        await pilot.pause()
-        drawer = a.query_one("#log_drawer")
-        assert drawer.display is True
-        assert a._log_filter == "Optimizing INT8"
-        lines = _drawer_lines(a)
-        assert lines, "filtered view must show matching lines"
-        assert all("Optimizing INT8" in ln for ln in lines), lines
-        # The border title advertises the active filter.
-        assert "Optimizing INT8" in drawer.border_title
-        assert "unrelated" not in "\n".join(lines)
-
-
-async def test_esc_clears_filter(tmp_path, monkeypatch):
-    """Esc clears an active filter; the normal stream resumes."""
-    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
-    a = appmod.QuantApp()
-    async with a.run_test() as pilot:
-        a.log_msg("Optimizing INT8 frame one")
-        a.log_msg("another Optimizing INT8 line")
-        a.log_msg("plain line after")
-        await pilot.pause()
-        # Activate the filter programmatically.
+        a.log_msg("alpha")
         a.query_one("#log_drawer").display = True
-        a._apply_log_filter("Optimizing INT8")
         await pilot.pause()
-        assert a._log_filter == "Optimizing INT8"
-        # Esc clears it.
+        n_before = len(_drawer_lines(a))
         await pilot.press("escape")
         await pilot.pause()
-        assert a._log_filter == ""
-        # New writes flow unfiltered again.
-        n_before = len(_drawer_lines(a))
-        a.log_msg("post-filter line plain")
-        await pilot.pause()
-        lines = _drawer_lines(a)
-        assert len(lines) > n_before
-        assert any("post-filter line plain" in ln for ln in lines)
+        # No filter machinery: the stream is untouched.
+        assert len(_drawer_lines(a)) >= n_before
 
 
-async def test_filtered_writes_only_matching_lines(tmp_path, monkeypatch):
-    """While filtered, live writes append ONLY matching lines."""
+async def test_drawer_shows_plain_stream_after_progress(tmp_path, monkeypatch):
+    """Guard: the drawer still receives the normal stream — a progress frame
+    collapses into the footer (no drawer noise), a real line is appended."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
-        a.log_msg("Optimizing INT8 seed line")
+        a.log_msg("CTQ_PROGRESS " + json.dumps(
+            {"phase": "quantize", "cur": 1, "total": 4, "pct": 25.0,
+             "label": "Optimizing INT8"}
+        ))
+        a.log_msg("plain line after progress")
         a.query_one("#log_drawer").display = True
-        a._apply_log_filter("Optimizing INT8")
-        a.log_msg("Optimizing INT8 second frame")
-        a.log_msg("noise that must not show")
         await pilot.pause()
         lines = _drawer_lines(a)
-        assert any("seed line" in ln for ln in lines)
-        assert any("second frame" in ln for ln in lines)
-        assert not any("noise" in ln for ln in lines)
+        assert any("plain line after progress" in ln for ln in lines)
+        # Progress frames never flood the drawer.
+        assert not any("Optimizing INT8" in ln for ln in lines)
+
+
+async def test_drawer_toggle_still_works(tmp_path, monkeypatch):
+    """Regression guard: `l` still toggles the drawer."""
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        drawer = a.query_one("#log_drawer")
+        assert drawer.display is False
+        a.action_toggle_log()
+        await pilot.pause()
+        assert drawer.display is True
+        a.action_toggle_log()
+        await pilot.pause()
+        assert drawer.display is False

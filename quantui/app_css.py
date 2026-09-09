@@ -23,13 +23,9 @@ MAIN_CSS = """
     # border box at height 2 spends BOTH rows on the border and clips its text.
     #footer_stats { border: round $panel; background: $surface; padding: 0 1;
                    height: 3; margin-top: 0; text-style: none; color: $text-muted; }
-    # Phase chips as pills (S2.2): the rail row grows to the 3-row box
-    # (height: auto — the old fixed 1 clipped the border), the label hugs its
-    # text with a max-width cap so long labels fill the row instead of
-    # overflowing it.
-    .rail_row { height: auto; }
-    .rail_label { border: round $panel; background: $surface; padding: 0 1;
-                  height: 3; width: auto; max-width: 100%; }
+    # Close ✕ row on the results card (user request 2026-09-09): always
+    # available (not success-gated), right-aligned like the other button rows.
+    #footer_close_row { height: auto; align: right middle; }
     # Radio buttons keep a readable, theme-driven label color (S2.2).
     RadioSet > RadioButton { color: $text; }
     .field { height: auto; }

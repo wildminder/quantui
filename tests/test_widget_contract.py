@@ -2,9 +2,9 @@
 
 These boot the real ``QuantApp`` headlessly and assert that every id exported by
 ``quantui.ids`` exists and is queryable, plus a few type/cap assertions on the
-key widgets (``#log`` is a capped ``RichLog``, ``#progress_rail`` is a
-``ProgressRail``, both family radios are present). Any layout refactor in
-Phase 1+ MUST keep this file green unchanged.
+key widgets (``#log`` is a capped ``RichLog``, both family radios are present).
+Any layout refactor in Phase 1+ MUST keep this file green unchanged (updated
+2026-09-09: the per-phase #progress_rail was removed — user request).
 """
 
 from textual.widgets import RadioButton, RadioSet, RichLog
@@ -41,14 +41,18 @@ async def test_log_is_richlog_with_cap():
         assert log.max_lines == appmod.RUN_LOG_MAX_DISPLAY_LINES
 
 
-async def test_progress_rail_is_progressrail():
-    """S1.8: #progress_rail (the stacked mini-bar rail) is mounted in the app."""
-    from quantui import panels
+async def test_progress_rail_is_gone():
+    """2026-09-09 (user request): the per-phase #progress_rail was removed —
+    it duplicated the footer stats line and opened the log drawer on click."""
+    from textual.css.query import NoMatches
 
     a = appmod.QuantApp()
     async with a.run_test():
-        rail = a.query_one("#progress_rail")
-        assert isinstance(rail, panels.ProgressRail)
+        try:
+            a.query_one("#progress_rail")
+            raise AssertionError("#progress_rail still mounted; removal regression")
+        except NoMatches:
+            pass  # expected
 
 
 async def test_family_radios_present():

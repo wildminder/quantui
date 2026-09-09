@@ -1,181 +1,111 @@
-"""Headless tests for the stacked ProgressRail (plan S1.8).
+"""ProgressRail removal tripwire (user request 2026-09-09).
 
-Covers: two structured CTQ_PROGRESS envelopes -> 2 stacked determinate rows;
-ctq (N/M) headers still collapse to ONE row; clicking a row posts
-``ProgressRail.BarClicked`` with the phase key.
+The per-phase chip rows were removed: they duplicated the footer stats line's
+counts AND clicking them opened the log drawer — a behavior the user
+explicitly rejected ("We do not need to open log window by clicking on the
+footer"). The aggregate bar (#footer_bar) + boxed stats line (#footer_stats)
+are the single progress surface. These tests pin the absence (mirrors the
+listm / onthefly removal patterns).
 """
 
+import os
+
+import pytest
+from textual.css.query import NoMatches
 
 from quantui import app as appmod
-from quantui import panels
+
+_QUANTUI_DIR = os.path.join(os.path.dirname(__file__), "..", "quantui")
 
 
-def _envelope(phase: str, cur: int, total: int, label: str) -> str:
-    import json
-    return "CTQ_PROGRESS " + json.dumps(
-        {"phase": phase, "cur": cur, "total": total, "pct": round(100 * cur / total, 1),
-         "label": label}
-    )
+def _read(rel: str) -> str:
+    with open(os.path.join(_QUANTUI_DIR, rel), encoding="utf-8") as fh:
+        return fh.read()
 
 
-async def test_progress_rail_stacks_determinate_bars(tmp_path, monkeypatch):
-    """Two distinct structured phases -> two stacked label rows (phase-name
-    chips: counts live in the stats line — dedup round 2)."""
-    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
-    a = appmod.QuantApp()
-    async with a.run_test() as pilot:
-        a.log_msg(_envelope("shard", 1, 3, "Quantizing shard"))
-        a.log_msg(_envelope("quantize", 40, 4000, "Optimizing INT8"))
-        await pilot.pause()
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-        rows = list(rail.query(".rail_row"))
-        assert len(rows) == 2, rows
-        # No row carries a ProgressBar anymore (single-bar rule).
-        for row in rows:
-            assert len(list(row.query("ProgressBar"))) == 0
-        # Labels are phase-name chips WITHOUT counts (stats line owns counts).
-        labels = [str(r.query_one(".rail_label").content) for r in rows]
-        assert "Quantizing shard" in labels[0] and "[1/3]" not in labels[0]
-        assert "Optimizing INT8" in labels[1] and "[40/4000]" not in labels[1]
+def test_progress_rail_source_tripwire():
+    """No trace of the rail feature may remain in the active source modules.
 
-
-async def test_rail_collapses_nm_headers(tmp_path, monkeypatch):
-    """ctq '(N/M) Processing' headers collapse to ONE row (store already does)."""
-    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
-    a = appmod.QuantApp()
-    async with a.run_test() as pilot:
-        a.log_msg("(1/211) Processing (INT8): a.weight")
-        a.log_msg("(2/211) Processing (INT8): b.weight")
-        await pilot.pause()
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-        rows = list(rail.query(".rail_row"))
-        assert len(rows) == 1, rows
-        label = rows[0].query_one(".rail_label")
-        assert "(2/211)" in str(label.content)
-
-
-async def test_bar_click_posts_message(tmp_path, monkeypatch):
-    """Clicking a row posts BarClicked(phase) up to the app."""
-    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
-    a = appmod.QuantApp()
-    async with a.run_test() as pilot:
-        a.log_msg(_envelope("shard", 2, 3, "Quantizing shard"))
-        await pilot.pause()
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-        row = rail.query_one(".rail_row")
-
-        clicked = []
-
-        # Capture the message at the App level (bubbled from the row).
-        orig = appmod.QuantApp.on_progress_rail_bar_clicked
-
-        def rec(self, event):
-            clicked.append(event.phase)
-            orig(self, event)
-
-        monkeypatch.setattr(appmod.QuantApp, "on_progress_rail_bar_clicked", rec)
-        # Simulate a click on the row.
-        row.post_message(panels.ProgressRail.BarClicked("shard"))
-        await pilot.pause()
-        assert clicked == ["shard"], clicked
-
-
-async def test_click_row_label_posts_bar_clicked(tmp_path, monkeypatch):
-    """Regression (user report, quantization crash): a REAL click on a row's
-    chip Label must post BarClicked.
-
-    The old code read ``event.target`` (not a Textual attribute) -> the click
-    raised ``AttributeError: 'Click' object has no attribute 'target'``. The
-    event arrives with ``event.widget`` = the Label; the rail's parent walk
-    must resolve it to the row.
+    Pinned strings: the widget classes, the click-to-filter handler chain and
+    the phase-filter state. Docstring references to the removal are allowed.
     """
-    from textual.widgets import Label as _Label  # noqa: F401  (type clarity)
+    for rel in ("panels.py", "app.py", "ids.py"):
+        src = _read(rel)
+        for needle in (
+            "ProgressRailRow",
+            "class ProgressRail",
+            "BarClicked",
+            ".rail_label",
+            ".rail_row",
+            ".rail_more",
+            "set_states",
+            "_apply_log_filter",
+            "on_progress_rail_bar_clicked",
+            "PROGRESS_RAIL",
+            'id="progress_rail"',
+            '"#progress_rail"',
+        ):
+            assert needle not in src, f"{rel} still contains {needle!r}"
 
+
+async def test_progress_rail_is_gone(tmp_path, monkeypatch):
+    """Headless absence pin: #progress_rail must not be mounted anywhere,
+    even after progress frames stream in."""
+    import json
+
+    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        a._show_run_footer()
+        a.log_msg("CTQ_PROGRESS " + json.dumps(
+            {"phase": "quantize", "cur": 1, "total": 4, "pct": 25.0,
+             "label": "Optimizing INT8"}
+        ))
+        await pilot.pause()
+        with pytest.raises(NoMatches):
+            a.query_one("#progress_rail")
+        with pytest.raises(NoMatches):
+            a.query_one(".rail_row")
+
+
+async def test_clicking_footer_does_not_open_log_drawer(tmp_path, monkeypatch):
+    """The user-reported behavior is gone: clicking the run footer (bar, stats
+    box, status strip) must NEVER open the log drawer."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
         # Reveal the footer WITHOUT action_run: no run means no completion
-        # toast, so the pilot click cannot be intercepted.
+        # toast intercepting pilot clicks.
         a._show_run_footer()
-        a.log_msg(_envelope("shard", 1, 3, "Quantizing shard"))
         await pilot.pause()
-
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-        label = rail.query_one(".rail_label", _Label)
-
-        clicked = []
-        orig = appmod.QuantApp.on_progress_rail_bar_clicked
-
-        def rec(self, event):
-            clicked.append(event.phase)
-            orig(self, event)
-
-        monkeypatch.setattr(appmod.QuantApp, "on_progress_rail_bar_clicked", rec)
-        await pilot.click(label)
-        await pilot.pause()
-
-        assert clicked == ["shard"], clicked
-        # Observable effect (same contract as tests/test_log_filter.py):
-        # the drawer opens, filtered to the clicked phase.
-        assert a.query_one("#log_drawer").display is True
-        assert a._log_filter == "shard"
-
-
-async def test_click_rail_body_no_crash(tmp_path, monkeypatch):
-    """A click on the rail itself (or a non-row child) must not crash and must
-    not post BarClicked."""
-    from textual import events
-
-    monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
-    a = appmod.QuantApp()
-    async with a.run_test(size=(120, 40)) as pilot:
-        a._show_run_footer()
-        # Overflow setup: 6 phases -> rows + a '+2 more' non-row child.
-        for i in range(6):
-            a.log_msg(_envelope(f"phase{i}", i + 1, 10, f"Phase {i}"))
-        await pilot.pause()
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-
-        clicked = []
-        orig = appmod.QuantApp.on_progress_rail_bar_clicked
-
-        def rec(self, event):
-            clicked.append(event.phase)
-            orig(self, event)
-
-        monkeypatch.setattr(appmod.QuantApp, "on_progress_rail_bar_clicked", rec)
-
-        # (a) Real click on the '+N more' Label (a rail child, NOT a row).
-        more = rail.query_one(".rail_more")
-        await pilot.click(more)
-        await pilot.pause()
-        assert clicked == [], clicked
-
-        # (b) A Click event posted at the rail body itself (widget = rail).
-        rail.post_message(
-            events.Click(
-                widget=rail, x=0, y=0, delta_x=0, delta_y=0, button=1,
-                shift=False, meta=False, ctrl=False,
-            )
-        )
-        await pilot.pause()
-        assert clicked == [], clicked
-        # No BarClicked -> drawer stays hidden with no filter applied.
         assert a.query_one("#log_drawer").display is False
-        assert a._log_filter == ""
+
+        # Click every footer surface: nothing may open the drawer.
+        for selector in ("#footer_bar", "#footer_stats", "#status", "#footer_left"):
+            await pilot.click(selector)
+            await pilot.pause()
+            assert a.query_one("#log_drawer").display is False, (
+                f"clicking {selector} opened the log drawer"
+            )
 
 
-async def test_rail_overflow_caps_at_four_rows(tmp_path, monkeypatch):
-    """More than MAX_ROWS phases -> exactly MAX_ROWS rows + a '+N more' label."""
+async def test_stats_line_still_shows_counts(tmp_path, monkeypatch):
+    """Guard against over-deletion: the counts the rail used to show still
+    appear in the boxed stats line (single surface, no duplication)."""
+    import json
+
+    from textual.widgets import Label
+
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
-        for i in range(6):
-            a.log_msg(_envelope(f"phase{i}", i + 1, 10, f"Phase {i}"))
+        a._show_run_footer()
+        a._run_start_ts = 1.0
+        a.log_msg("CTQ_PROGRESS " + json.dumps(
+            {"phase": "quantize", "cur": 1, "total": 4, "pct": 25.0,
+             "label": "Optimizing INT8"}
+        ))
         await pilot.pause()
-        rail = a.query_one("#progress_rail", panels.ProgressRail)
-        rows = list(rail.query(".rail_row"))
-        more = list(rail.query(".rail_more"))
-        assert len(rows) == panels.ProgressRail.MAX_ROWS
-        assert len(more) == 1
-        assert "2 more" in str(more[0].content)
+        stats = str(a.query_one("#footer_stats", Label).content)
+        assert "25" in stats
+        assert "[1/4]" in stats

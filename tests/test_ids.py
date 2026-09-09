@@ -23,4 +23,4 @@ def test_pinned_literals_match_current_app():
     assert ids.RUN_CTQ == "#run_ctq"
     assert ids.STATUS == "#status"
     assert ids.LOG == "#log"
-    assert ids.PROGRESS_RAIL == "#progress_rail"
+    assert ids.RESULT_BUTTONS == "#result_buttons"

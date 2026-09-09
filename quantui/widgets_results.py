@@ -1,9 +1,8 @@
 """Results card + structured validation issue rows (plan S2.2 / S2.3).
 
-``ResultsCard`` is a rail-side summary of the LAST finished run: outcome line,
-output path, duration, exit code, plus ``[Copy path] [Open folder]`` buttons.
-It lives in the right-hand rail under the ProgressRail. When idle it renders a
-muted placeholder so the rail layout does not jump.
+``ResultsCard`` is a run-footer summary of the LAST finished run: outcome
+line, output path, duration, exit code, plus ``[Copy path] [Open folder]``
+buttons (success only) and an always-available ``[Close ✕]`` footer toggle.
 
 ``show_issues`` renders structured validation issues (level/text/hint rows)
 from :meth:`QuantApp.action_validate_comfy` -- replacing log-only output while
@@ -95,8 +94,14 @@ class ResultsCard(Vertical):
         yield Horizontal(
             Button("Copy path", id=ids.COPY_OUT_PATH.lstrip("#"), variant="default"),
             Button("Open folder", id=ids.OPEN_OUT_FOLDER.lstrip("#"), variant="default"),
-            Button("Close ✕", id=ids.CLOSE_FOOTER.lstrip("#"), variant="default"),
             id=ids.RESULT_BUTTONS.lstrip("#"),
+            classes="log_buttons",
+        )
+        # Close ✕ on its OWN row (user request 2026-09-09): interrupted runs
+        # must get the close toggle too, and that row is success-gated.
+        yield Horizontal(
+            Button("Close ✕", id=ids.CLOSE_FOOTER.lstrip("#"), variant="default"),
+            id="footer_close_row",
             classes="log_buttons",
         )
 
@@ -142,7 +147,8 @@ class ResultsCard(Vertical):
 
     def on_mount(self) -> None:
         # S2.2 (plan 2026-09-08-run-footer): the Copy/Open button row is hidden
-        # until a SUCCESSFUL record lands (show_record gates it).
+        # until a SUCCESSFUL record lands (show_record gates it). The Close ✕
+        # row is intentionally NOT hidden — it works on interrupted runs too.
         try:
             self.query_one(f"#{ids.RESULT_BUTTONS.lstrip('#')}").display = False
         except NoMatches:

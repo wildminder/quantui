@@ -6,6 +6,8 @@ Composition + CSS pins live here; the visibility LIFECYCLE is S2.1 (same file);
 the success-only results buttons are S2.2 (test_results_card*.py).
 """
 
+import threading
+
 from textual.widgets import Label
 
 from quantui import app as appmod
@@ -18,8 +20,9 @@ from quantui.widgets_results import ResultsCard
 async def test_footer_holds_rail_status_results():
     """Composition (F2-S1.2): footer has BOTH panels but shows only one at a time.
 
-    Progress mode (default): #footer_left visible (rail + bar + stats + status),
-    ResultsCard hidden. Done mode: card visible (full width), left hidden."""
+    Progress mode (default): #footer_left visible (bar + stats + status),
+    ResultsCard hidden. Done mode: card visible (full width), left hidden.
+    2026-09-09: the per-phase #progress_rail is gone (user request)."""
     from textual.containers import Vertical
 
     import quantui.profiles_store as ps
@@ -27,12 +30,10 @@ async def test_footer_holds_rail_status_results():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
         footer = a.query_one("#run_footer", panels.RunFooter)
-        rail = footer.query_one("#progress_rail", panels.ProgressRail)
-        assert isinstance(rail, panels.ProgressRail)
         assert isinstance(footer.query_one("#status", Label), Label)
-        # F2-S1.2: the new wide aggregate bar + stats line live in the left panel.
+        # F2-S1.2: the wide aggregate bar + stats line live in the left panel.
         left = footer.query_one("#footer_left", Vertical)
-        assert left.query_one("#progress_rail") is not None
+        assert left.query_one("#footer_bar", BlockBar) is not None
         assert left.query_one("#status") is not None
         # S1.3 (plan 2026-09-09-control-panel): the bar is the chunky BlockBar.
         bar = footer.query_one("#footer_bar", BlockBar)
@@ -237,9 +238,9 @@ def _envelope(phase: str, cur: int, total: int, label: str) -> str:
     )
 
 
-async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
-    """Progress renders INSIDE the footer: an envelope produces a .rail_row
-    under #run_footer (phase-name chip — no bar, no counts duplication)."""
+async def test_footer_progress_collapses_to_stats_line(tmp_path, monkeypatch):
+    """Progress renders into the footer WITHOUT per-phase rows (2026-09-09):
+    an envelope updates the bar + stats line; no .rail_row is mounted."""
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
@@ -249,12 +250,11 @@ async def test_footer_rail_receives_progress(tmp_path, monkeypatch):
         await pilot.pause()
         footer = a.query_one("#run_footer", panels.RunFooter)
         rows = list(footer.query(".rail_row"))
-        assert len(rows) == 1
-        label = rows[0].query_one(".rail_label")
-        assert "Quantizing shard" in str(label.content)
-        # Single-bar rule + dedup round 2: no bar, no counts in the row.
-        assert len(list(rows[0].query("ProgressBar"))) == 0
-        assert "[2/3]" not in str(label.content)
+        assert rows == [], "per-phase rail rows are removed (user request)"
+        bar = footer.query_one("#footer_bar", BlockBar)
+        assert bar.progress > 0
+        stats = str(footer.query_one("#footer_stats", Label).content)
+        assert "[2/3]" in stats
 
 
 # ---- F2-S2.1: aggregate footer bar + stats line --------------------------------
@@ -480,3 +480,80 @@ async def test_close_button_posts_message_only(tmp_path, monkeypatch):
 
     src = inspect.getsource(ResultsCard.on_button_pressed)
     assert "CLOSE_FOOTER" in src and "CloseRequested" in src
+
+
+async def test_close_button_available_on_stopped_run(tmp_path, monkeypatch):
+    """User request 2026-09-09: interrupted (stopped) runs get the close
+    toggle too — Close ✕ lives on its own row, NOT the success-gated
+    #result_buttons row."""
+    from quantui import profiles_store as ps
+    from quantui.widgets_results import ResultsCard
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import _gguf_cfg
+
+    class BlockingRunner:
+        def __init__(self) -> None:
+            self._running = False
+            self._ev = threading.Event()
+
+        def run(self, cmd, cwd, observer, progress_debug_fh=None) -> int:
+            self._running = True
+            self._ev.wait()
+            self._running = False
+            return 1  # stopped, not a clean success
+
+        def is_running(self) -> bool:
+            return self._running
+
+        def terminate(self) -> None:
+            self._running = False
+            self._ev.set()
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = BlockingRunner()
+
+        a.action_run()
+        await _wait_until(lambda: a._run_active is True, pilot)
+        a._terminate_run()
+        await _wait_until(lambda: "Stopped" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+
+        card = a.query_one(ResultsCard)
+        # Copy/Open stay hidden (success-gated) but Close ✕ is available.
+        assert card.query_one("#result_buttons").display is False
+        assert card.query_one("#close_footer").display is True
+
+        # Pressing it hides the whole footer (same dispatch as the done mode).
+        from textual.widgets import Button
+
+        card.query_one("#close_footer", Button).press()
+        await pilot.pause()
+        assert a.query_one("#run_footer").display is False
+
+
+async def test_close_button_available_on_failed_run(tmp_path, monkeypatch):
+    """Failed runs get the close toggle too (same row, same dispatch)."""
+    from quantui import profiles_store as ps
+    from quantui.widgets_results import ResultsCard
+    from tests.test_app_headless import _wait_until
+    from tests.test_results_card_headless import FakeRunner, _gguf_cfg
+
+    monkeypatch.setenv(ps.CONFIG_ENV_VAR, str(tmp_path / "cfg"))
+    a = appmod.QuantApp()
+    async with a.run_test() as pilot:
+        cfg = _gguf_cfg(tmp_path)
+        a._read_config = lambda: cfg
+        a.runner = FakeRunner(rc=2)
+
+        a.action_run()
+        await a.workers.wait_for_complete()
+        await _wait_until(lambda: "Failed" in str(
+            a.query_one(ResultsCard).query_one("#result_outcome").content), pilot)
+
+        card = a.query_one(ResultsCard)
+        assert card.query_one("#result_buttons").display is False
+        assert card.query_one("#close_footer").display is True

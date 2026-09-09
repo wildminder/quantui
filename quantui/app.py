@@ -169,7 +169,6 @@ class QuantApp(
         ("o", "open_log_file", "Open full log file"),
         ("comma", "log_size_prev", "Log size -"),
         ("full_stop", "log_size_next", "Log size +"),
-        ("escape", "clear_log_filter", "Clear log filter"),
         # S2.4: save current params as a named profile.
         ("ctrl+s", "save_profile", "Save profile"),
         # S2.5: show recent jobs (row-activate re-runs).
@@ -203,10 +202,6 @@ class QuantApp(
         self._apply_profile_fields(values)
         self.action_run()
 
-    def action_clear_log_filter(self) -> None:
-        """Esc: clear an active phase filter (S1.9); normal stream resumes."""
-        self._clear_log_filter()
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # Sci-fi theme (plan 2026-09-08-scifi-ui S2.1): register + default to
@@ -236,8 +231,6 @@ class QuantApp(
         # Log drawer state (S1.4): starts hidden at size M; follow mode on (S1.5).
         self._log_drawer_size: str = "M"
         self._log_follow: bool = True
-        # Phase filter for the drawer (S1.9): empty = normal capped stream.
-        self._log_filter: str = ""
         # Wave 2 state: last-run duration (S2.1/S2.2), last RunRecord (S2.2),
         # lazily-loaded profiles store (S2.4/S2.5).
         self._last_run_duration: float = 0.0
@@ -313,16 +306,9 @@ class QuantApp(
             self._debug_swallow(exc, "write_run_log")
 
     def write_log(self, line: str) -> None:
-        """Append a line to the on-screen RichLog.
-
-        While a phase filter is active (S1.9) only lines containing the filter
-        term are appended; the authoritative temp file keeps EVERY line either
-        way (written by ``write_run_log`` upstream of this method).
-        """
+        """Append a line to the on-screen RichLog."""
         try:
             log = self.query_one(RichLog)
-            if self._log_filter and self._log_filter not in line:
-                return  # filtered out of the drawer view only
             if not log._size_known:
                 # S1.4: the log drawer starts HIDDEN, and Textual defers every
                 # RichLog.write until the widget gets its first real region
@@ -338,33 +324,6 @@ class QuantApp(
         except NoMatches:
             # Widget not mounted yet (early log lines before compose finishes).
             pass
-
-    def _apply_log_filter(self, term: str) -> None:
-        """Activate/clear the phase filter and re-render the drawer from the
-        FULL temp-file log (last 500 matching lines; plan S1.9)."""
-        self._log_filter = term or ""
-        drawer = self._drawer()
-        if drawer is None:
-            return
-        if self._log_filter:
-            tail: list[str] = []
-            for ln in self._read_full_log().splitlines():
-                if self._log_filter in ln:
-                    tail.append(ln)
-            tail = tail[-500:]
-            try:
-                log = self.query_one(RichLog)
-                log.clear()
-                if not log._size_known:
-                    log._size_known = True
-                for ln in tail:
-                    log.write(ln)
-                log.scroll_end(animate=False)
-            except NoMatches:
-                pass  # drawer RichLog not mounted yet
-        else:
-            self._resume_follow()
-        self._update_drawer_title()
 
     def on_follow_rich_log_scrolled_up(self, event) -> None:
         """S1.5: the user scrolled #log upward -> pause follow, show '(paused)'."""
@@ -393,29 +352,21 @@ class QuantApp(
             pass  # drawer closed / RichLog not mounted
 
     def update_live(self, text: str) -> None:
-        """Legacy per-message live update: show the text-only progress (no determinate bar).
+        """Legacy per-message live update (LogSink contract; T09 back-compat).
 
-        Since S1.8 the render target is the stacked ``#progress_rail`` (the old
-        single ``#live_progress`` widget was deleted in the same step).
+        The former render target (the stacked #progress_rail) was removed
+        2026-09-09 (user request: it duplicated the stats line and opened the
+        log drawer on click). The footer aggregate bar + stats line — refreshed
+        by :meth:`update_progress` — are the single progress surface.
         """
-        try:
-            self.query_one("#progress_rail", panels.ProgressRail).set_states(self._live.states())
-        except NoMatches:
-            pass  # rail not mounted yet
 
     def update_progress(self, states: list) -> None:
-        """Render the structured/collapsed progress store into #progress_rail (and,
-        since S1.7, into the global header strip; since footer-v2 S2.1, into the
-        footer's wide aggregate bar + stats line).
+        """Render the structured/collapsed progress store into the footer's
+        wide aggregate bar + stats line (footer-v2 S2.1).
 
         ``states`` is the ordered list of :class:`~quantui.live_progress.ProgressState`
-        from :attr:`_live`. Each determinate state renders as its own stacked
-        mini-bar row; text-only states get a label-only row (bar hidden).
+        from :attr:`_live`.
         """
-        try:
-            self.query_one("#progress_rail", panels.ProgressRail).set_states(states)
-        except NoMatches:
-            pass  # rail not mounted yet
         self._render_footer_bar(states)
 
     def _render_footer_bar(self, states: list) -> None:
@@ -459,47 +410,15 @@ class QuantApp(
             parts.append(st["rate"])  # e.g. "66.7it/s" (F2-S2.2)
         stats_lbl.update(" • ".join(parts))
 
-    def on_progress_rail_bar_clicked(self, event) -> None:
-        """S1.9: clicking a progress row opens the log drawer filtered to that
-        phase (only matching lines from the authoritative temp file)."""
-        event.stop()
-        phase = getattr(event, "phase", "") or ""
-        if not phase:
-            return
-        self._log_filter = ""  # reset first so toggle logic is simple
-        drawer = self._drawer()
-        if drawer is not None and not drawer.display:
-            # open WITHOUT resuming follow overwriting the filter render
-            drawer.display = True
-        self._apply_log_filter(phase)
-
-    def _clear_log_filter(self) -> None:
-        """Esc in the drawer / any manual clear: back to the normal stream."""
-        if not self._log_filter:
-            return
-        self._apply_log_filter("")
-        try:
-            log = self.query_one(RichLog)
-            log.clear()
-            for ln in self._read_full_log().splitlines()[-RUN_LOG_MAX_DISPLAY_LINES:]:
-                log.write(ln)
-            log.scroll_end(animate=False)
-        except NoMatches:
-            pass  # drawer RichLog not mounted
-
     def clear_live(self) -> None:
-        """Blank the progress rail (keep it mounted so the layout doesn't jump).
+        """Blank the live-progress store view (keep the sink contract intact).
 
         F2-S2.1: the FOOTER bar is NOT touched here — a plain log line clears
         the live store mid-run, but the footer aggregate must hold its value
         (its own hold, ``_footer_hold``, resets only at run boundaries). The
-        S1.7 header strip is gone (post-v0.9.1 dedup): the footer is the
-        single progress surface.
+        footer is the single progress surface; the per-phase rail it once
+        rendered was removed 2026-09-09 (user request).
         """
-        try:
-            self.query_one("#progress_rail", panels.ProgressRail).set_states([])
-        except NoMatches:
-            pass  # rail not mounted yet
 
     # --- LogObserver (subject callback; marshals to the main thread) ------------
     def on_segment(self, seg: "stream_parser.StreamSegment") -> None:
@@ -808,8 +727,7 @@ class QuantApp(
         if drawer is None:
             return
         state = "follow" if getattr(self, "_log_follow", True) else "paused"
-        filt = f" | filter: {self._log_filter}" if getattr(self, "_log_filter", "") else ""
-        drawer.border_title = f"Log [{self._log_drawer_size}] ({state}){filt}"
+        drawer.border_title = f"Log [{self._log_drawer_size}] ({state})"
         try:
             self.query_one("#log_follow", Label).update(
                 "follow" if self._log_follow else "paused"
