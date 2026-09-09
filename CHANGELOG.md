@@ -14,6 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `progress` alias so the run footer can swap it in without touching callers.
 
 ### Changed
+- **Control-panel visual pass** (plan 2026-09-09-control-panel S3.1): idle /
+  run / done / drawer / wizard states screenshot-audited at 120x40 — no
+  near-black fills anywhere, palette-v2 colors present, chunky bar verified
+  (228 block glyphs at 65%).
 - **Control-panel element polish** (plan 2026-09-09-control-panel S2.2):
   phase chips render as pill boxes (round panel border + surface fill, the
   rail row grows to fit), the footer stats line becomes a boxed readout, and
