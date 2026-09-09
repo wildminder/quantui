@@ -14,6 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `progress` alias so the run footer can swap it in without touching callers.
 
 ### Changed
+- **Section headers as instrument-group strips** (plan 2026-09-09-control-panel
+  S2.1): the six numbered section labels (GGUF model path / output / method,
+  ComfyUI input / output / format) carry a `section_header` class and render
+  as panel-tinted bold strips — no widget-tree changes.
 - **Full-width chunky footer progress bar** (plan 2026-09-09-control-panel
   S1.3): the run footer's aggregate bar is now the 3-row BlockBar spanning
   the panel width (was a 32-cell single-line strip inside a ~117-wide

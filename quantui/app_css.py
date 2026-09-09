@@ -29,6 +29,12 @@ MAIN_CSS = """
     .log_follow { height: 1; margin: 0 1 0 0; text-style: none; color: $text-muted; width: auto; }
     Input { margin-bottom: 1; height: 3; }
     Label { margin-top: 1; text-style: bold; }
+    # Section headers (plan 2026-09-09-control-panel S2.1): the numbered
+    # section labels read as instrument-group strips — panel-tinted, bold,
+    # $text (not muted), full width. The bare Label rule above stays for
+    # non-section labels.
+    .section_header { background: $panel; color: $text; text-style: bold;
+                      padding: 0 1; margin-top: 1; width: 1fr; }
     # Sci-fi inputs (plan 2026-09-08-scifi-ui S2.2): electric-cyan frame from
     # the theme's primary; focusing "powers up" the border to the accent hue.
     # The -invalid state stays error-red so validation remains unambiguous.
