@@ -329,11 +329,12 @@ def build_gguf_panel() -> VerticalScroll:
     ``_read_config`` still reads every value.
     """
     return VerticalScroll(
-        Label("1. Model path (HuggingFace folder or single .safetensors)"),
+        Label("1. Model path (HuggingFace folder or single .safetensors)",
+              classes="section_header"),
         Horizontal(Input(id="model", placeholder="/path/to/model"), Button("Browse", id="browse_model"), classes="field"),
-        Label("2. Output folder"),
+        Label("2. Output folder", classes="section_header"),
         Horizontal(Input(id="output", placeholder="/path/to/output"), Button("Browse", id="browse_out"), classes="field"),
-        Label("3. Quantization method"),
+        Label("3. Quantization method", classes="section_header"),
         # T8 (plan 2026-08-31-gguf-unsloth-parity): Select -> Input. A 35-entry
         # dropdown cannot express multi-method runs ("q4_k_m, q5_k_m"); free
         # text + validate_gguf's whitelist (T5) catches typos the Select used
@@ -387,13 +388,15 @@ def build_comfy_panel() -> VerticalScroll:
     """
     convrot_choices = [("64", "64"), ("256", "256"), ("1024", "1024")]
     return VerticalScroll(
-        Label("1. Input: a single .safetensors file, a folder with one, or a HuggingFace sharded folder (model.safetensors.index.json)"),
+        Label("1. Input: a single .safetensors file, a folder with one, or a HuggingFace sharded folder (model.safetensors.index.json)",
+              classes="section_header"),
         Horizontal(Input(id="ctq_input", placeholder="/path/to/model.safetensors or /path/to/hf-model-folder"),
                    Button("Browse", id="browse_ctq_in"),
                    Button("Audit", id="audit_ctq_in", disabled=True), classes="field"),
         # .pt suggestion (user feature): hidden until the input is a .pt/.pth/.ckpt.
         PtSuggestBox(),
-        Label("2. Output: a .safetensors file (single) OR a folder (HuggingFace sharded output)"),
+        Label("2. Output: a .safetensors file (single) OR a folder (HuggingFace sharded output)",
+              classes="section_header"),
         Horizontal(Input(id="ctq_output", placeholder="/path/to/MyModel-fp8_e4m3.safetensors OR /path/to/output-folder"),
                    Button("Browse", id="browse_ctq_out"), classes="field"),
         Label("Output mode (HuggingFace sharded input only)"),
@@ -402,7 +405,7 @@ def build_comfy_panel() -> VerticalScroll:
             RadioButton("Single file (merge)", id="om_single"),
             id="ctq_output_mode",
         ),
-        Label("3. Format"),
+        Label("3. Format", classes="section_header"),
         Select(format_options(), id="ctq_format", value=DEFAULT_CTQ_FORMAT, allow_blank=False),
         # Unified INT8 option widgets (v0.4.0): scaling / block_size / convrot /
         # convrot_group_size are now plain OptionField-driven widgets (the old
