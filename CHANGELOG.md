@@ -232,7 +232,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   (sign bit set) — both pinned by tests (`tests/test_gguf_qgolden.py`).
 
 ### Changed
-- **Model-audit trio (NTH-012 / NTH-011 / NTH-007, commit 71120f0).**
+- **Model-audit trio (NTH-012 / NTH-011 / NTH-007, commit 6e5bceb).**
   `quant_validator` now flags orphan `.input_scale` entries with no matching
   `.comfy_quant` sibling (NTH-012). The audit report gains a per-module `q%`
   column — quantized matrix params vs the module's linear + linear_review

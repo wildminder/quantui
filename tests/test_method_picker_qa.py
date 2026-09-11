@@ -1,4 +1,4 @@
-"""QA verification for the method picker (commit 6938a58).
+"""QA verification for the method picker (commit 6bda155).
 
 Independently authored edge cases -- complements
 ``tests/test_method_picker_headless.py`` (the engineer's tests) without
