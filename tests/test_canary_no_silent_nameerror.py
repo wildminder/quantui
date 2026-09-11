@@ -1,7 +1,7 @@
 """CRIT-002 STEP 2.7 historical-regression canary.
 
-The original bug that motivated the silent-swallow overhaul (see
-the issues tracker, CRIT-002): a ``NameError`` from a missing
+The original bug that motivated the silent-swallow overhaul (see the issues
+tracker, CRIT-002): a ``NameError`` from a missing
 import inside an ``except Exception: pass`` block was swallowed invisibly and
 took a ``sys.settrace`` debugging session to locate.
 

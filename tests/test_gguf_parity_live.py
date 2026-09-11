@@ -26,14 +26,14 @@ import pytest
 
 from tests.gguf_miniread import read_gguf_header
 
-ORACLE_GGUF = r"models/diffusion_models/VibeVoice-1.5B-q8_0_new.gguf"
-SOURCE_DIR = r"models/tts/VibeVoice/VibeVoice-1.5B"
+ORACLE_GGUF = os.environ.get("UQT_ORACLE_GGUF", "")
+SOURCE_DIR = os.environ.get("UQT_ORACLE_SOURCE", "")
 
 pytest.importorskip("gguf", reason="live parity runs in the worker env (gguf installed)")
-if not os.path.isfile(ORACLE_GGUF):
-    pytest.skip(f"oracle GGUF not present: {ORACLE_GGUF}", allow_module_level=True)
-if not os.path.isfile(os.path.join(SOURCE_DIR, "model.safetensors.index.json")):
-    pytest.skip(f"source checkpoint not present: {SOURCE_DIR}", allow_module_level=True)
+if not ORACLE_GGUF or not os.path.isfile(ORACLE_GGUF):
+    pytest.skip("oracle GGUF not present (set UQT_ORACLE_GGUF)", allow_module_level=True)
+if not SOURCE_DIR or not os.path.isfile(os.path.join(SOURCE_DIR, "model.safetensors.index.json")):
+    pytest.skip("source checkpoint not present (set UQT_ORACLE_SOURCE)", allow_module_level=True)
 
 
 def _oracle_census() -> Counter:

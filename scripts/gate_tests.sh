@@ -4,6 +4,7 @@
 # commit hook can report each stage independently.
 #
 # Usage:  bash scripts/gate_tests.sh
+# The headless test venv has NO torch.
 # Override the interpreter with GATE_PYTHON (e.g. a torch-enabled CTQ venv).
 #
 # Opt-in stages (both OFF by default so the commit-time gate stays fast):

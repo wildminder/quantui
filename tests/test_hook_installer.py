@@ -61,8 +61,8 @@ def make_repo(tmp_path, git_dir=True):
 def exec_bit_supported(directory):
     """True when ``chmod +x`` is observable on this filesystem.
 
-    pytest's tmp_path lives under ``X:\\Temp`` on this machine, where chmod is
-    silently a no-op (the repo volume does honour it). Probing keeps the
+    pytest's tmp_path may live on a filesystem where chmod is silently a
+    no-op (the repo volume does honour it). Probing keeps the
     executable-bit assertion meaningful without a permanent false failure.
     """
     probe = os.path.join(directory, ".chmod-probe")
@@ -182,7 +182,7 @@ def test_gate_tests_script_invokes_pytest_gate():
     assert "-m pytest" in body
     assert "--ignore=tests/test_incremental_safetensors.py" in body
     assert "--ignore=tests/test_stream_quant.py" in body
-    assert ".venv" in body, "default interpreter is the managed headless venv"
+    assert "GATE_PYTHON" in body, "interpreter override documented in-script"
 
 
 def test_gate_tests_script_propagates_pytest_exit_code(tmp_path):

@@ -16,7 +16,9 @@ import pytest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GATE_TORCH = os.path.join(REPO_ROOT, "scripts", "gate_torch.sh")
-DEFAULT_VENV = ".venv-torch"
+# Optional local override for the "real default interpreter" probe below;
+# unset on any other checkout/machine (test skips cleanly in that case).
+DEFAULT_VENV = os.environ.get("UQT_GATE_TORCH_VENV", "")
 
 bash = shutil.which("bash")
 pytestmark = pytest.mark.skipif(bash is None, reason="bash not available")
@@ -37,7 +39,7 @@ def test_script_exists_and_names_suites():
         src = fh.read()
     assert "test_stream_quant.py" in src
     assert "test_incremental_safetensors.py" in src
-    assert DEFAULT_VENV in src  # default torch venv is pinned in the script
+    assert "GATE_PYTHON" in src  # interpreter override is documented in-script
 
 
 def test_check_missing_interpreter_fails():
@@ -65,13 +67,17 @@ def test_check_torchless_interpreter_fails(tmp_path):
 
 
 def test_check_default_venv_has_torch():
-    """The REAL CTQ venv (script default) must pass --check on this machine.
+    """The REAL default interpreter (script default) must pass --check.
 
-    Skipped when the venv is absent (e.g. another checkout/machine).
+    Active only when UQT_GATE_TORCH_VENV points at a local venv; skipped
+    everywhere else (fresh clone / CI).
     """
-    if not os.path.exists(f"{DEFAULT_VENV}/Scripts/python.exe"):
-        pytest.skip(f"{DEFAULT_VENV} not present on this machine")
-    code, out = _run_check(f"{DEFAULT_VENV}/Scripts/python.exe")
+    if not DEFAULT_VENV:
+        pytest.skip("UQT_GATE_TORCH_VENV not set (no local torch venv pinned)")
+    exe = f"{DEFAULT_VENV}/Scripts/python.exe" if os.name == "nt" else f"{DEFAULT_VENV}/bin/python"
+    if not os.path.exists(exe):
+        pytest.skip(f"{exe} not present on this machine")
+    code, out = _run_check(exe)
     assert code == 0, out
 
 

@@ -1,12 +1,10 @@
 """Pinned golden bytes for the native GGUF Q8_0 / Q4_0 kernels.
 
 Generated 2026-09-07 from the **gguf-py oracle** (`gguf.quants.quantize`,
-version installed in the worker env `.venv-gguf`,
-gguf 0.19-era with the numpy quants module) — see plan
-`native-backend plan` STEP 0.1 and the §9
-completion log. gguf-py's block encoders are the llama.cpp reference
-implementation semantics, so byte-equality against these constants pins our
-numpy kernels to the llama.cpp convention.
+generated with gguf-py 0.19 with the numpy quants module) — see the
+native-backend plan STEP 0.1 and the completion log. gguf-py's block encoders
+are the llama.cpp reference implementation semantics, so byte-equality against
+these constants pins our numpy kernels to the llama.cpp convention.
 
 Deterministic inputs (`np.random.default_rng(42)`, standard_normal * 0.13,
 float32, C-order):

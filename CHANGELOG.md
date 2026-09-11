@@ -329,7 +329,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `CTQ_PROGRESS_PREFIX` constant), F841 ×2 (dead `input_scales` / `overall`),
   UP042 ×2 (`Family`/`Backend` are now `enum.StrEnum`), B905 ×2 (explicit
   `zip(strict=…)`), E731 ×2 (assigned lambda → `def`), I001 ×1.
-  `docs/reviews/ruff-baseline.txt` is ratcheted from 27 to 0, so any new
+  The ruff baseline is ratcheted from 27 to 0, so any new
   finding fails `scripts/precommit_ruff.sh` outright.
 - **`Family` / `Backend` are `enum.StrEnum`.** On Python 3.11+ a `(str, Enum)`
   mixin formats as `"Family.GGUF"`; `StrEnum` formats as the value `"gguf"`.
@@ -365,7 +365,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   the two torch-dependent suites (`test_stream_quant.py` +
   `test_incremental_safetensors.py` — the streaming quantization and resumable
   writer integration coverage) in the CTQ venv
-  (`.venv-torch`; `GATE_PYTHON` overrides). The script
+  (a torch-enabled venv; `GATE_PYTHON` overrides). The script
   probes the interpreter and torch BEFORE pytest so failures name the actual
   problem; `--check` is a fast validate-only mode. Real run: 20 passed.
   Environment drift noted: the headless venv now carries torch-cpu, so both
@@ -426,7 +426,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `tests/test_model_audit_tui.py`.
 - **PathModal path entry + Windows drive quick-jump.** `DirectoryTree` cannot
   navigate above its root, so on Windows a picker opened with an empty/relative
-  start was trapped in one drive and could never reach `X:\_Models` or `D:\`.
+  start was trapped in one drive and could never reach another drive (`D:\`).
   The modal now has a path-entry `Input` (`#path_entry`, pre-filled with the
   start path): Enter on an existing directory re-roots the tree there, in file
   mode Enter on an existing file selects it and enables `Use Selected`, and

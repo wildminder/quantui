@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # IMP-003: count-based ruff gate. Fails only when live finding count EXCEEDS
-# the baseline recorded in docs/reviews/ruff-baseline.txt.
+# the frozen ruff baseline file.
 # Once baseline reaches 0 this becomes a strict zero-tolerance gate.
 # IMP-002 S3A.5: additionally runs mypy over the five typing-clean core
 # modules; any mypy error fails the gate.
@@ -24,7 +24,8 @@ ruff_out=$("$RUFF" check quantui/ tests/ 2>/dev/null || true)
 # gate broke precisely when the finding count reached zero (NTH-008).
 live=$(printf '%s' "$ruff_out" | grep -oE "^Found [0-9]+ error" | grep -oE "[0-9]+" | head -1 || true)
 [ -z "$live" ] && live=0
-base=$(grep -m1 -oE "^Found [0-9]+" "$BASELINE_FILE" | grep -oE "[0-9]+$")
+base=$(grep -m1 -oE "^Found [0-9]+" "$BASELINE_FILE" 2>/dev/null | grep -oE "[0-9]+$" || true)
+[ -z "$base" ] && base=0  # missing baseline file (fresh clone) = zero tolerance
 
 echo "ruff gate: live=$live baseline=$base"
 if [ "$live" -gt "$base" ]; then

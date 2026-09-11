@@ -222,7 +222,7 @@ selected but the worker interpreter lacks `comfy-kitchen`, `capabilities.py`
 warns and the run is blocked rather than failing obscurely mid-quantize.
 
 On-disk outputs follow the current ComfyUI-native `{"format": ...}` `.comfy_quant`
-schema; see [`docs/comfy-quant-schema.md`](docs/comfy-quant-schema.md).
+schema; the comfy-quant schema reference is kept in the project docs.
 
 ## Streaming & resumable quantization (ComfyUI / `convert_to_quant`)
 
@@ -424,8 +424,8 @@ Every commit is gated. The gate has two stages, both of which must pass before
 
 | Stage | Script | What it runs |
 | --- | --- | --- |
-| 1 | `scripts/precommit_ruff.sh` | ruff count vs. the frozen baseline in `docs/reviews/ruff-baseline.txt`, then mypy over the five typing-clean core modules (`COVERAGE=1` additionally enforces per-module coverage floors) |
-| 2 | `scripts/gate_tests.sh` | the headless pytest suite: `python -m pytest tests/ -q --ignore=tests/test_incremental_safetensors.py --ignore=tests/test_stream_quant.py` |
+| 1 | `scripts/precommit_ruff.sh` | ruff count vs. the frozen baseline file (see `scripts/precommit_ruff.sh`), then mypy over the five typing-clean core modules (`COVERAGE=1` additionally enforces per-module coverage floors) |
+| 2 | `scripts/gate_tests.sh` | the headless pytest suite: `python -m pytest tests/ -q --ignore=tests/test_incremental_safetensors.py --ignore=tests/test_stream_quant.py` (interpreter configurable via `GATE_PYTHON`) |
 
 Install the gate as a git hook (idempotent — safe to re-run):
 
@@ -434,7 +434,7 @@ bash scripts/install_hooks.sh       # writes .git/hooks/pre-commit
 bash scripts/install_hooks.sh /path/to/other/checkout
 ```
 
-The repo currently has **no remote**, so there is no push-based CI: enforcement
+There is no push-based CI yet: enforcement
 happens at commit time. The hook re-runs the exact same scripts, so it can also
 be invoked by hand — `bash .git/hooks/pre-commit` — and, if a remote is added
 later, wrapped unchanged in a CI workflow.
