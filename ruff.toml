@@ -1,4 +1,5 @@
-# IMP-003: ruff configuration. Baseline count tracked in docs/reviews/ruff-baseline.txt;
+# IMP-003: ruff configuration. Baseline count tracked in the frozen baseline
+# file (see scripts/precommit_ruff.sh);
 # the pre-commit gate fails only when findings exceed that baseline.
 line-length = 100
 target-version = "py312"

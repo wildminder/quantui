@@ -2,7 +2,7 @@
 
 Covers the fix for the Windows picker trap: ``DirectoryTree`` cannot navigate
 above its root, so a picker opened with an empty/relative start could never
-reach other drives (e.g. ``X:\\_Models`` or ``D:\\``). The modal now carries a
+reach other drives (e.g. another drive or ``D:\\``). The modal now carries a
 path-entry ``Input`` (Enter re-roots the tree / selects a file in file mode)
 and, on Windows only, a row of drive quick-jump buttons.
 

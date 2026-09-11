@@ -10,7 +10,7 @@ What it does:
   * loads the input ``.safetensors`` (or HuggingFace sharded folder),
   * quantizes every 2-D floating weight via the toolkit's native INT4 / W4A8 ops,
   * serializes each layer to the ComfyUI-native ``.comfy_quant`` schema (see
-    ``quantui/comfy_quant_schema.py`` + ``docs/comfy-quant-schema.md``),
+    ``quantui/comfy_quant_schema.py``),
   * writes a single output ``.safetensors``.
 
 IMPORTANT: this module is **import-safe** (no torch/comfy at top level). The heavy

@@ -2,7 +2,7 @@
 # NTH-009 (issues tracker Phase 2): on-demand torch-suite gate pass.
 #
 # The commit-time headless gate (gate_tests.sh) --ignores the two
-# torch-dependent suites — the test venv .venv has NO torch:
+# torch-dependent suites — the default test interpreter has NO torch:
 #   * tests/test_stream_quant.py            (streaming quantization integration)
 #   * tests/test_incremental_safetensors.py (resumable safetensors writer)
 # Those two suites are the most safety-critical integration coverage in the
@@ -12,8 +12,8 @@
 #   bash scripts/gate_torch.sh --check   # fast probe: interpreter + torch only
 #
 # GATE_PYTHON overrides the interpreter (same convention as gate_tests.sh).
-# The default venv needs pytest present:  uv pip install pytest
-# (the CTQ venvs are not the test venv; install pytest on first use).
+# The default interpreter needs pytest present:  uv pip install pytest
+# (the CTQ venvs are separate; install pytest on first use).
 #
 # Scope note (lead decision): ONLY the two torch suites run here — not the
 # full headless suite. The CTQ venvs lack pytest-asyncio configuration for

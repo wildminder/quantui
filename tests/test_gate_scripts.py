@@ -1,7 +1,7 @@
 """Tests for scripts/precommit_ruff.sh (NTH-008, step 2.6).
 
 The ruff count gate compares the live finding count against the frozen baseline
-in docs/reviews/ruff-baseline.txt, then runs mypy over the five core modules.
+in the frozen baseline file, then runs mypy over the five core modules.
 RUFF / MYPY can be overridden so the script is exercisable without the real
 tools (and without waiting on mypy).
 
@@ -32,7 +32,14 @@ pytestmark = pytest.mark.skipif(bash is None, reason="bash not available")
 
 
 def _baseline() -> int:
-    """Read the frozen baseline count (it is ratcheted down over time)."""
+    """Read the frozen baseline count; a missing file means baseline 0.
+
+    This mirrors the script's clone-safety behavior: docs/ is not tracked in
+    git, so on a fresh clone the baseline file is absent and the gate runs in
+    zero-tolerance mode.
+    """
+    if not os.path.isfile(BASELINE_FILE):
+        return 0
     with open(BASELINE_FILE, encoding="utf-8") as fh:
         for line in fh:
             m = re.match(r"^Found (\d+)", line)
@@ -88,6 +95,9 @@ def test_findings_at_baseline_pass(tmp_path):
 
 def test_findings_above_baseline_fail(tmp_path):
     base = _baseline()
+    # With a missing baseline file the gate is zero-tolerance: any finding
+    # fails. "Found 3 errors." exercises both the baseline>0 and the
+    # baseline==0 (fresh-clone) paths identically.
     code, out = _run_gate(tmp_path, ruff_out=f"Found {base + 3} errors.")
     assert code != 0, "more findings than the baseline must fail the gate"
     assert "new ruff findings introduced" in out, out

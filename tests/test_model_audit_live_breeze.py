@@ -7,24 +7,27 @@ run on the machine that holds the checkpoints and skip cleanly elsewhere, so
 the headless GATE stays hermetic either way.
 """
 
+import os
 from pathlib import Path
 
 import pytest
 
 from quantui.model_audit import audit_file, suggest_exclusions
 
-BF16 = Path("models/tts/Breeze-TTS-2-comfyui/Breeze-TTS-2-bf16.safetensors")
-HYBRID = Path(
-    "models/tts/Breeze-TTS-2-comfyui/Breeze-TTS-2-int8-hybrid.safetensors"
+# Paths come from the environment (machine-local checkpoints; unset on a
+# fresh clone -> tests skip cleanly). Note Path("") is Path(".") on Windows,
+# so the guard must require a NON-EMPTY variable value AND an existing file.
+BF16 = Path(os.environ.get("UQT_BREEZE_BF16", ""))
+HYBRID = Path(os.environ.get("UQT_BREEZE_HYBRID", ""))
+
+breeze_guard = pytest.mark.skipif(
+    not (os.environ.get("UQT_BREEZE_BF16") and os.environ.get("UQT_BREEZE_HYBRID")
+         and BF16.is_file() and HYBRID.is_file()),
+    reason="Breeze checkpoints not configured (set UQT_BREEZE_BF16 / UQT_BREEZE_HYBRID)",
 )
 
-breeze_files = pytest.mark.skipif(
-    not (BF16.exists() and HYBRID.exists()),
-    reason="Breeze files not present",
-)
 
-
-@breeze_files
+@breeze_guard
 def test_live_bf16_categories():
     report = audit_file(str(BF16))
     assert len(report.tensors) == 1115
@@ -39,7 +42,7 @@ def test_live_bf16_categories():
     }
 
 
-@breeze_files
+@breeze_guard
 def test_live_bf16_module_linears():
     report = audit_file(str(BF16))
     linears_per_module: dict[str, int] = {}
@@ -54,7 +57,7 @@ def test_live_bf16_module_linears():
     }
 
 
-@breeze_files
+@breeze_guard
 def test_live_bf16_suggestion():
     report = audit_file(str(BF16))
     suggestion = suggest_exclusions(report)
@@ -69,7 +72,7 @@ def test_live_bf16_suggestion():
     assert suggestion.rationale == {"embedding": 4, "head": 1, "linear_review": 1}
 
 
-@breeze_files
+@breeze_guard
 def test_live_hybrid_quantized_detection():
     report = audit_file(str(HYBRID))
     assert len(report.quantized_layers) == 378
@@ -86,7 +89,7 @@ def test_live_hybrid_quantized_detection():
     assert dict(groupsize_hist) == {256: 248, 64: 130}
 
 
-@breeze_files
+@breeze_guard
 def test_live_hybrid_reproduces_official_exclusion():
     """The hybrid's unquantized 2D .weight linear remainder == bf16 linears - 378.
 
