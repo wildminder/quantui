@@ -131,14 +131,37 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+async def _switch_to_comfy(a, pilot):
+    """Switch the app to the ComfyUI family and wait for the CTQ panel.
+
+    #ctq_format lives in the ComfyUI panel, which is only mounted by the family
+    switch, and that mount can land a beat later than the switch itself. A
+    single pilot.pause() is a mount race that fails on loaded or slow runners
+    (observed on the first GitHub Actions run), so poll for both panels.
+    """
+    for _ in range(20):
+        await pilot.pause()
+        try:
+            a.screen.query_one("#gguf_panel")
+            break
+        except Exception:
+            continue
+    a.action_family_comfy()
+    for _ in range(20):
+        await pilot.pause()
+        try:
+            a.screen.query_one("#ctq_format")
+            break
+        except Exception:
+            continue
+
+
 def test_ui_bf16_fp16_show_no_dynamic_option_widgets(tmp_path):
     async def main():
         from quantui.quant_methods import COMFY_FORMATS
         a = _make_app()
         async with a.run_test() as pilot:
-            await pilot.pause()
-            a.action_family_comfy()
-            await pilot.pause()
+            await _switch_to_comfy(a, pilot)
             all_keys = {opt.key for f in COMFY_FORMATS for opt in f.extra_options}
             for fmt in ("bf16", "fp16", "combine"):
                 a.query_one("#ctq_format", Select).value = fmt
@@ -157,9 +180,7 @@ def test_ui_run_builds_cmd_with_cast_dtype(tmp_path):
     async def main():
         a = _make_app()
         async with a.run_test() as pilot:
-            await pilot.pause()
-            a.action_family_comfy()
-            await pilot.pause()
+            await _switch_to_comfy(a, pilot)
             m = tmp_path / "model.safetensors"
             m.write_text("x")
             a.query_one("#ctq_input", Input).value = str(m)
@@ -183,9 +204,7 @@ def test_profile_roundtrip_keeps_new_format_ids(tmp_path):
     async def main():
         a = _make_app()
         async with a.run_test() as pilot:
-            await pilot.pause()
-            a.action_family_comfy()
-            await pilot.pause()
+            await _switch_to_comfy(a, pilot)
             for fmt in ("bf16", "fp16", "combine"):
                 a.query_one("#ctq_format", Select).value = fmt
                 await pilot.pause()
@@ -193,8 +212,8 @@ def test_profile_roundtrip_keeps_new_format_ids(tmp_path):
                 assert fields["ctq_format"] == fmt
                 # Apply back onto a fresh default app state -> survives intact.
                 b = _make_app()
-                async with b.run_test():
-                    b.action_family_comfy()
+                async with b.run_test() as bpilot:
+                    await _switch_to_comfy(b, bpilot)
                     b._apply_profile_fields(fields)
                     assert b.ctq_format() == fmt
 
@@ -205,18 +224,7 @@ def test_profile_unknown_format_id_falls_back_to_default(tmp_path):
     async def main():
         a = _make_app()
         async with a.run_test() as pilot:
-            # Wait for mount: action_family_comfy() -> on_radio_set_changed queries
-            # #gguf_panel, and ctq_format() queries #ctq_format. Neither exists
-            # until compose has run. A single pause is not enough on a loaded or
-            # slow runner, so poll for the CTQ panel instead of racing it.
-            for _ in range(20):
-                await pilot.pause()
-                try:
-                    a.screen.query_one("#ctq_format")
-                    break
-                except Exception:
-                    continue
-            a.action_family_comfy()
+            await _switch_to_comfy(a, pilot)
             # A saved profile referencing the dead 'onthefly' id must not crash
             # and must leave the select at its current valid value.
             fields = {"family": "comfy", "ctq_format": "onthefly"}
