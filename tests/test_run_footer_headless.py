@@ -8,6 +8,7 @@ the success-only results buttons are S2.2 (test_results_card*.py).
 
 import threading
 
+from conftest import wait_mounted
 from textual.widgets import Label
 
 from quantui import app as appmod
@@ -29,6 +30,7 @@ async def test_footer_holds_rail_status_results():
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#run_footer")
         footer = a.query_one("#run_footer", panels.RunFooter)
         assert isinstance(footer.query_one("#status", Label), Label)
         # F2-S1.2: the wide aggregate bar + stats line live in the left panel.
@@ -116,6 +118,7 @@ async def test_footer_hidden_until_run():
     """Direct seam unit: _show_run_footer() flips display on; idempotent."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#run_footer")
         footer = a.query_one("#run_footer", panels.RunFooter)
         assert footer.display is False
         a._show_run_footer()

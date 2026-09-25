@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+from conftest import wait_mounted
 
 from quantui import quant_validator as qv
 from quantui.comfy_quant_schema import encode_comfy_quant_config, write_safetensors
@@ -254,6 +255,7 @@ async def test_validate_button_logs_valid(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#validate_path")
         _switch_family(a, Family.COMFY)
         a.query_one("#validate_path").value = str(f)
         a.query_one("#validate", Button).press()
@@ -283,6 +285,7 @@ async def test_validate_button_logs_invalid(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#validate_path")
         _switch_family(a, Family.COMFY)
         a.query_one("#validate_path").value = str(f)
         a.query_one("#validate", Button).press()
@@ -302,6 +305,7 @@ async def test_validate_button_empty_path_errors(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#validate_path")
         _switch_family(a, Family.COMFY)
         a.query_one("#validate_path").value = ""
         a.query_one("#validate").press()

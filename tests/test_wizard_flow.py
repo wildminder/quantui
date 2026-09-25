@@ -1,6 +1,7 @@
 """Headless tests for S3.3 wizard stepped flow + review==form determinism gate."""
 
 
+from conftest import wait_mounted
 from textual.widgets import Input, Select
 
 from quantui import app as appmod
@@ -12,6 +13,7 @@ async def test_wizard_review_matches_form_cmd():
     filling the form directly (determinism gate)."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#model")
         # Form path: fill widgets directly.
         a.query_one("#model", Input).value = "/data/model.safetensors"
         a.query_one("#output", Input).value = "/data/out"

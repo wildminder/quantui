@@ -1,5 +1,7 @@
 """Headless tests for the command palette (plan S3.1)."""
 
+from conftest import wait_mounted
+
 from quantui import app as appmod
 from quantui.app import QuantCommands
 
@@ -24,6 +26,7 @@ async def test_palette_action_toggles_drawer():
     """Executing the Toggle-log command shows #log_drawer."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         drawer = a.query_one("#log_drawer")
         assert drawer.display is False
         a.action_toggle_log()
@@ -52,6 +55,7 @@ async def test_palette_dispatch_targets_app_not_screen():
     still dispatch actions to the app, where the handlers live."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         # Exactly what Textual 8.2.8 passes to providers: the default Screen
         # under the palette, NOT the QuantApp instance.
         provider = QuantCommands(a.screen)
@@ -97,6 +101,7 @@ async def test_palette_pick_method_opens_picker():
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#method")
         a.query_one("#method", Input).value = "q5_k_m"
         provider = QuantCommands(a.screen)
         provider._run("_palette_pick_method")
