@@ -50,7 +50,13 @@ class HandlersMixin:
         # (multi-method free text, T8). Custom override still wins; BOTH paths
         # strip whitespace. A comma list is returned verbatim -- the same
         # parse_methods downstream (validate_gguf / worker) splits it.
-        custom = self.query_one("#custom", Input).value.strip()
+        # #custom lives in a Collapsible in the GGUF panel and may not be mounted
+        # yet (or at all, under another family), so treat it as absent instead
+        # of raising NoMatches -- the method picker reads this on confirm.
+        try:
+            custom = self.query_one("#custom", Input).value.strip()
+        except NoMatches:
+            custom = ""
         if custom:
             return custom
         return self.query_one("#method", Input).value.strip()
