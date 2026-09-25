@@ -3,6 +3,8 @@
 S1.1: title pins. S2.1: theme registration + variable-value pins.
 """
 
+from conftest import wait_mounted
+
 from quantui import app as appmod
 from quantui.theme import build_cyber_theme
 
@@ -106,6 +108,7 @@ async def test_input_focus_border_changes(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#model")
         inp = a.query_one("#model")
         a.set_focus(inp)
         await pilot.pause()

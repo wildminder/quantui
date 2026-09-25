@@ -9,6 +9,7 @@ stream again. These tests pin the absence + the surviving drawer behavior.
 import json
 import os
 
+from conftest import wait_mounted
 from textual.widgets import RichLog
 
 from quantui import app as appmod
@@ -41,6 +42,7 @@ async def test_esc_no_longer_clears_any_filter(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         a.log_msg("alpha")
         a.query_one("#log_drawer").display = True
         await pilot.pause()
@@ -75,6 +77,7 @@ async def test_drawer_toggle_still_works(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         drawer = a.query_one("#log_drawer")
         assert drawer.display is False
         a.action_toggle_log()
