@@ -11,6 +11,7 @@ were latent before it) -- see their docstrings.
 
 import sys
 
+from conftest import wait_mounted
 from textual.widgets import Checkbox, Input, Static
 
 from quantui import app as appmod
@@ -215,6 +216,7 @@ async def test_method_info_native_hint():
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#method")
         a.query_one("#method", Input).value = "native_q8_0"
         a.update_method_info()
         await pilot.pause()

@@ -5,6 +5,7 @@ buffering (the RichLog stays mounted with display=False and keeps its
 ``max_lines`` cap while the authoritative temp file keeps every line).
 """
 
+from conftest import wait_mounted
 from textual.containers import Vertical
 from textual.widgets import RichLog
 
@@ -15,6 +16,7 @@ from quantui import panels
 async def test_log_drawer_toggle():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         drawer = a.query_one("#log_drawer")
         assert isinstance(drawer, Vertical)
         assert drawer.display is False  # hidden at start
@@ -27,6 +29,7 @@ async def test_log_drawer_toggle():
 async def test_log_drawer_size_cycle():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         drawer = a.query_one("#log_drawer")
         # Start at M; two presses of "," -> S then L (wraps backwards).
         await pilot.press(",")
@@ -43,6 +46,7 @@ async def test_drawer_hidden_keeps_log_buffering(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSLOTH_CTQ_LOG_DIR", str(tmp_path))
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#log_drawer")
         assert a.query_one("#log_drawer").display is False
         for i in range(150):
             a.log_msg(f"hidden-line-{i}")
