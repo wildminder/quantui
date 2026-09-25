@@ -70,7 +70,14 @@ class HandlersMixin:
         return self.query_one("#imatrix_path", Input).value.strip()
 
     def ctq_format(self) -> str:
-        val = self.query_one("#ctq_format", Select).value
+        # #ctq_format lives in the ComfyUI panel, so it is absent whenever
+        # another family is active. Callers include the background capability
+        # probe, which can fire while the GGUF panel is mounted; fall back to
+        # the default instead of raising NoMatches out of a worker thread.
+        try:
+            val = self.query_one("#ctq_format", Select).value
+        except NoMatches:
+            return DEFAULT_CTQ_FORMAT
         return str(val) if val else DEFAULT_CTQ_FORMAT
 
     def ctq_option_value(self, opt) -> object:
