@@ -21,6 +21,11 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    # The native GGUF modules (gguf_export, gguf_qkernels, quant_validator,
+    # dtype_cast, stream_quant, tensor_quant) import numpy, and ~11 test modules
+    # import it at module level. Without it here a clean dev install cannot even
+    # collect the test suite.
+    "numpy",
 ]
 torch-test = [
     "torch",

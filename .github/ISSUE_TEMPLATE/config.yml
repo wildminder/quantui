@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/wildminder/quantui/security/advisories/new
+    about: >-
+      Report a suspected vulnerability privately through GitHub Security
+      Advisories, following SECURITY.md in the repository root. Please do not
+      disclose it in a public issue, discussion, or pull request.

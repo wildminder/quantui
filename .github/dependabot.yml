@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Python dependencies of the TUI itself: pyproject.toml (project dependencies
+  # plus the `dev` and `torch-test` extras) and requirements.txt.
+  #
+  # requirements-ctq.txt also lives in the repository root, so it cannot be
+  # expressed as a separate Dependabot directory entry. Its single dependency
+  # (`convert-to-quant`) therefore appears in the same run; the group below keeps
+  # it in its own pull request, because it belongs to the SEPARATE ComfyUI
+  # worker environment rather than to the TUI's own environment. CI never
+  # installs that file.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      ctq-worker-environment:
+        patterns:
+          - "convert-to-quant"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

@@ -1,0 +1,132 @@
+name: Bug report
+description: Something in QuantUI does not behave as documented.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. The more precise the version and worker
+        information below, the faster it can be reproduced.
+
+        **Never paste Hugging Face tokens, API keys, or model weights into an
+        issue.** A Hugging Face token is runtime-only input (it is redacted from
+        the TUI log as `--hf-token=********`), but if one ever reaches an issue
+        by accident, revoke it immediately. Quantization outputs and model
+        files must be shared privately, not attached.
+
+        To report a security vulnerability, do **not** use this form. See
+        `SECURITY.md` in the repository root for private reporting.
+  - type: input
+    id: quantui-version
+    attributes:
+      label: QuantUI version
+      description: 'Output of `python -c "import quantui; print(quantui.__version__)"`'
+      placeholder: "0.10.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: tui-python
+    attributes:
+      label: Python version of the TUI interpreter
+      description: 'Output of `python --version` in the environment that launches QuantUI'
+      placeholder: "Python 3.12.7"
+    validations:
+      required: true
+  - type: dropdown
+    id: worker-interpreter-differs
+    attributes:
+      label: Does the worker interpreter differ from the TUI interpreter?
+      description: |
+        QuantUI spawns quantization workers as subprocesses. The worker
+        interpreter (Unsloth or ComfyUI `convert_to_quant`) is usually a
+        separate environment.
+      options:
+        - "Yes — the worker interpreter is a different Python"
+        - "No — both use the same interpreter"
+    validations:
+      required: true
+  - type: input
+    id: worker-python
+    attributes:
+      label: Python version of the worker interpreter
+      description: 'Output of `python --version` in the worker environment; leave empty if the same as above'
+      placeholder: "Python 3.12.9"
+    validations:
+      required: false
+  - type: dropdown
+    id: worker-path
+    attributes:
+      label: Which worker path was used?
+      options:
+        - Native GGUF (in-process, no transformers)
+        - Unsloth GGUF
+        - convert-to-quant (ComfyUI / ComfyUI quantization toolkit)
+        - ComfyUI kitchen (W4A4 / W4A8 / kitchen-era formats)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: method
+    attributes:
+      label: Quantization method and format
+      description: "For example `q4_k_m` GGUF, or `NVFP4` / `MXFP8` / `W4A4` safetensors."
+      placeholder: "q4_k_m (GGUF)"
+    validations:
+      required: false
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Numbered steps, starting from `quantui`. Include the worker interpreter
+        path if the behavior depends on it.
+      placeholder: |
+        1. Launch QuantUI with the Unsloth GGUF worker.
+        2. Select model path <model folder>.
+        3. Choose method q4_k_m and start the run.
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen, and where you saw it documented.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: |
+        Include the exact error text or the relevant part of the run log. The
+        log lives in the system temporary directory as
+        `unsloth-quant-tui-<timestamp>.log`; paste only the relevant excerpt,
+        after checking it for tokens, local absolute paths, and model paths.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues for this problem.
+          required: true
+        - label: This report contains no tokens, API keys, or model weights.
+          required: true
+        - label: This is not a security vulnerability (those go through `SECURITY.md`).
+          required: true

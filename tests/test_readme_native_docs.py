@@ -15,6 +15,15 @@ def _readme() -> str:
         return fh.read()
 
 
+def test_readme_install_uses_package_install_and_launch_commands():
+    text = _readme()
+    install = text.split("## Install", 1)[1].split("\n## ", 1)[0]
+
+    assert "python -m pip install ." in install
+    assert "quantui" in install
+    assert "python -m quantui" in text
+
+
 def test_readme_has_native_backend_section():
     text = _readme()
     assert "## Native GGUF backend" in text

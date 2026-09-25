@@ -15,33 +15,56 @@ You only need to provide three things:
    run. IQ* methods require an **imatrix** (a local `.dat`/`.gguf` path or
    *Auto*).
 
-The heavy Unsloth/CUDA work runs in a separate python process (configurable via
-the "Worker Python interpreter" field), so this TUI stays light and responsive
-and streams the worker's live log.
+The heavy backend work runs in separate Python processes (configurable via the
+worker-interpreter fields), so this TUI stays light and responsive and streams
+each worker's live log.
 
-## Requirements
+## Requirements and environments
 
-- A CUDA-capable GPU + a python environment with **`unsloth`** and a CUDA build of
-  **torch** installed (this is what actually does the quantization).
-- This TUI only needs **`textual`**.
+QuantUI keeps the Textual UI and each heavy quantization backend in separate
+Python environments:
+
+| Environment | What runs there | Dependencies |
+| --- | --- | --- |
+| Main TUI | The Textual application | Python >= 3.12 and the package installed with `python -m pip install .`; this installs `textual` and the `quantui` entry point. |
+| Unsloth worker | `Backend.UNSLOTH` GGUF methods | A separate interpreter with `unsloth` and a matching CUDA build of `torch`; normally a CUDA-capable GPU is required. |
+| convert-to-quant worker | `Backend.CTQ` ComfyUI methods | A separate interpreter with `requirements-ctq.txt` installed **and a matching CUDA torch build installed separately**. `convert-to-quant` intentionally does not install torch. Add Triton for INT8 ConvRot and the extra packages/runtimes noted in that requirements file for NVFP4/MXFP8. |
+| Native GGUF worker | `native_*` methods | The interpreter selected as *Worker Python interpreter* needs `numpy` (`python -m pip install numpy`), but does **not** need Unsloth, transformers, torch, or a GPU. The main TUI interpreter is suitable after installing numpy there. |
+
+The ComfyUI `Backend.COMFY_KITCHEN` formats use a separate ComfyUI-Python
+interpreter with `comfy-kitchen` and `comfy.quant_ops`; see the backend table
+below. Point the TUI's worker-interpreter fields at the appropriate
+`python`/`python.exe` executable.
 
 ## Install
 
+From a fresh clone, choose any checkout directory name:
+
 ```bash
-cd unsloth-quant-tui
+git clone <repository-url> /path/to/your/checkout
+cd /path/to/your/checkout
 python -m venv .venv
-.venv/Scripts/activate        # Windows  (or: source .venv/bin/activate on Linux/macOS)
-pip install -r requirements.txt
+.venv/Scripts/activate        # Windows (or: source .venv/bin/activate on Linux/macOS)
+python -m pip install .
 ```
 
-In the **same** environment (or any env that has `unsloth` + CUDA torch), make
-sure `unsloth` is importable. Point the TUI's *Worker Python interpreter* field
-at that environment's `python`/`python.exe` if it differs from the one running
-the TUI.
+`requirements.txt` mirrors the core `textual` dependency only. It does **not**
+install this project or create the `quantui` command, so the primary install
+path is `python -m pip install .`.
+
+For an editable development install with the tools declared by the project's
+`dev` extra (pytest, pytest-asyncio, pytest-cov, ruff, and mypy), use:
+
+```bash
+python -m pip install -e ".[dev]"
+```
 
 ## Run
 
+Activate the main TUI environment, then launch with either command:
+
 ```bash
+quantui
 python -m quantui
 ```
 
@@ -59,6 +82,20 @@ python -m quantui
 - Optional: max sequence length, load-in-4bit, push-to-hub repo + token.
 - **Run Quantization** (or press `r`). Watch the live log on the right.
 - `q` quits.
+
+### Hugging Face push token
+
+The Hugging Face push token is entered at runtime and is not saved in named
+profiles or recent-job records. Use a narrowly scoped **write** token rather
+than an account-wide token. QuantUI masks the token in the worker command shown
+in the run log, while the worker still receives the value needed for the push.
+
+## Community
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE)
 
 ## How it works
 
@@ -104,10 +141,11 @@ press **List all methods** in the TUI for the full annotated list.
 The GGUF panel also ships a **native exporter** (`Backend.NATIVE`, plan
 2026-09-07): a numpy-only pipeline that converts any HF safetensors
 checkpoint — single file, sharded folder, or plain `model.safetensors` — to
-spec-conformant GGUF **without transformers, unsloth, or torch**. Because it
-uses generic tensor-name mapping instead of per-architecture registration, it
-handles models the unsloth backend must reject (TTS models like
-**VibeVoice-1.5B**, or any unknown architecture).
+spec-conformant GGUF **without transformers, unsloth, or torch**. Its worker
+interpreter needs `numpy`, but no Unsloth/Torch stack or GPU. Because it uses
+generic tensor-name mapping instead of per-architecture registration, it handles
+models the Unsloth backend must reject (TTS models like **VibeVoice-1.5B**, or
+any unknown architecture).
 
 Five methods: `native_q8_0`, `native_q4_0`, `native_f16`, `native_bf16` (lossless for bf16 sources — no f16 inf-overflow risk), `native_f32`.
 
@@ -179,20 +217,23 @@ Quick guidance:
 
 ## Project layout
 
-The TUI is split into a thin Textual composition root plus pure, Textual-free
-modules. Only `app.py`, `panels.py`, `screens.py`, and `handlers.py` import
-`textual`; everything else is testable without a TUI runtime.
+The TUI is split into Textual-aware UI modules and Textual-free core modules.
+`app.py`, `panels.py`, `screens.py`, and `handlers.py` (plus companion UI
+helpers such as `form_state.py`, `palette.py`, `theme.py`, and the widget
+modules) import Textual. Core modules such as `run_config.py`,
+`stream_parser.py`, `worker_runner.py`, the quantization engines, and the worker
+implementations remain Textual-free and can be tested without booting a TUI.
 
 | Module | Role |
 | --- | --- |
-| `quantui/app.py` | **Composition root.** Wires the mixin + Textual `App`; the only module that imports `textual`. |
+| `quantui/app.py` | **Composition root.** Wires the mixins and the Textual `App`. |
 | `quantui/quant_methods.py` | Family/method/format/preset registry (pure, Textual-free). Source of truth for GGUF + COMFY formats. |
 | `quantui/stream_parser.py` | Worker stdout → segments; progress-line detection (pure). |
 | `quantui/live_progress.py` | `LiveProgressStore` — thread-safe live-progress state. |
 | `quantui/worker_runner.py` | `WorkerRunner` — launches the worker subprocess and pumps its log (DI seam). |
 | `quantui/ui_bridge.py` | Bridges parsed log segments to UI widgets/sinks. |
 | `quantui/run_config.py` | `RunConfig`/`GgufConfig`/`CtqConfig` dataclasses + pure validate/build-cmd logic (DI seam). |
-| `quantui/panels.py` | Pure widget-builder functions that compose each panel. |
+| `quantui/panels.py` | Textual widgets and composition functions for the family panels. |
 | `quantui/screens.py` | Modal screens (browse, confirm, etc.). |
 | `quantui/handlers.py` | `HandlersMixin` — all `on_*` event handlers; reads widgets once into `RunConfig`. |
 | `quantui/capabilities.py` | Worker-environment capability probing (incl. `comfy_kitchen`). |
@@ -222,7 +263,9 @@ selected but the worker interpreter lacks `comfy-kitchen`, `capabilities.py`
 warns and the run is blocked rather than failing obscurely mid-quantize.
 
 On-disk outputs follow the current ComfyUI-native `{"format": ...}` `.comfy_quant`
-schema; the comfy-quant schema reference is kept in the project docs.
+schema. A schema reference is maintained in internal project documentation,
+which is not distributed with the GitHub clone or PyPI package and is not
+required for installation or use.
 
 ## Streaming & resumable quantization (ComfyUI / `convert_to_quant`)
 

@@ -1,0 +1,74 @@
+name: Feature request
+description: Propose a change to QuantUI and the problem it solves.
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        QuantUI is a Textual terminal UI over several quantization worker
+        backends. Requests are most useful when they start from the problem you
+        are trying to solve rather than from a proposed implementation.
+
+        **Do not attach model weights, quantization outputs, or credentials to
+        a feature request.** Requests are about the tool, not the data; large
+        files cannot be reviewed here and belong in a Hugging Face repository or
+        a local path.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation, not the solution.
+      placeholder: |
+        When I run a ComfyUI W4A4 quantization, I cannot tell whether the
+        missing output is because comfy-kitchen is not installed in the worker
+        interpreter or because the format is unsupported on my GPU.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Who is this for, and how often does it happen?
+      description: Your workflow, how often you hit it, and what you do today as a workaround.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: |
+        Workarounds you tried, other tools that solve this, or a previous
+        implementation of the same idea. Include why they fall short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would the change look like?
+      description: Optional. UI sketch, CLI shape, or config field are all useful.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this affect?
+      options:
+        - TUI (screens, panels, progress, results)
+        - Unsloth GGUF worker
+        - convert-to-quant / ComfyUI worker
+        - Profiles and run configuration
+        - Packaging, installation, or startup
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and discussions for this request.
+          required: true
+        - label: This request contains no model weights, generated files, or credentials.
+          required: true
