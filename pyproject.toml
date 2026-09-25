@@ -26,6 +26,13 @@ dev = [
     # import it at module level. Without it here a clean dev install cannot even
     # collect the test suite.
     "numpy",
+    # quantui/worker.py uses transformers.AutoConfig and the arch-gate tests
+    # monkeypatch it, so the headless suite needs transformers importable even
+    # though no torch is present.
+    "transformers",
+    # quantui/quant_validator.py reads safetensors through the numpy backend
+    # (no torch), and the parity/pt-convert tests import it directly.
+    "safetensors",
 ]
 torch-test = [
     "torch",

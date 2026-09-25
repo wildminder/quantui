@@ -206,9 +206,16 @@ def test_profile_unknown_format_id_falls_back_to_default(tmp_path):
         a = _make_app()
         async with a.run_test() as pilot:
             # Wait for mount: action_family_comfy() -> on_radio_set_changed queries
-            # #gguf_panel, which does not exist until compose has run. Without this
-            # pause the test is a mount race (flaked under full-gate load).
-            await pilot.pause()
+            # #gguf_panel, and ctq_format() queries #ctq_format. Neither exists
+            # until compose has run. A single pause is not enough on a loaded or
+            # slow runner, so poll for the CTQ panel instead of racing it.
+            for _ in range(20):
+                await pilot.pause()
+                try:
+                    a.screen.query_one("#ctq_format")
+                    break
+                except Exception:
+                    continue
             a.action_family_comfy()
             # A saved profile referencing the dead 'onthefly' id must not crash
             # and must leave the select at its current valid value.
