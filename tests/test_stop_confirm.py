@@ -10,6 +10,8 @@ import sys
 import threading
 import time
 
+from conftest import wait_mounted
+
 from quantui import app as appmod
 from quantui import run_config as rc_mod
 from quantui import screens
@@ -67,6 +69,7 @@ async def test_stop_immediate_below_threshold(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#gguf_panel")
         cfg = _ctq_cfg(tmp_path)
         a.family = Family.COMFY
         a.query_one("#gguf_panel").display = False
@@ -94,6 +97,7 @@ async def test_stop_confirm_modal_above_threshold(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#gguf_panel")
         cfg = _ctq_cfg(tmp_path)
         a.family = Family.COMFY
         a.query_one("#gguf_panel").display = False

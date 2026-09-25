@@ -32,6 +32,7 @@ import string
 from pathlib import Path
 
 import pytest
+from conftest import wait_mounted
 from textual.widgets import Button, DirectoryTree, Input
 
 from quantui import app as appmod
@@ -103,6 +104,7 @@ async def test_path_entry_file_mode_selects_file(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#path_entry")
         modal = await _push_modal(a, str(tmp_path), file_mode=True)
         entry = modal.query_one("#path_entry", Input)
 
@@ -118,6 +120,7 @@ async def test_path_entry_nonexistent_ignored(tmp_path):
     """Enter on a nonexistent path is a no-op (tree root and #use unchanged)."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#path_entry")
         modal = await _push_modal(a, str(tmp_path))
         entry = modal.query_one("#path_entry", Input)
         tree = modal.query_one("#tree", DirectoryTree)
@@ -140,6 +143,7 @@ async def test_tree_selection_syncs_path_entry(tmp_path):
 
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#tree")
         modal = await _push_modal(a, str(tmp_path))
         tree = modal.query_one("#tree", DirectoryTree)
 

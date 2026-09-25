@@ -7,6 +7,7 @@ full option-id surface, and the hand-typed-typo validation gate still being
 enforced (the picker must not weaken it).
 """
 
+from conftest import wait_mounted
 from textual.widgets import Button, Input, SelectionList
 
 from quantui import app as appmod
@@ -41,6 +42,7 @@ async def test_empty_field_confirm_nothing_keeps_empty():
     # would break the run gate's expectations).
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#method")
         a.query_one("#method", Input).value = ""
         sl = await _open_picker(a, pilot)
         assert sl.selected == []
@@ -54,6 +56,7 @@ async def test_typo_in_field_preselects_nothing():
     # preselect anything (unknown ids are silently ignored).
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#method")
         a.query_one("#method", Input).value = "q4_km,"
         sl = await _open_picker(a, pilot)
         assert sl.selected == []
@@ -67,6 +70,7 @@ async def test_iq_star_preselected_roundtrips():
     # An imatrix-gated iq* id preselects and confirm round-trips it verbatim.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#method")
         a.query_one("#method", Input).value = "iq2_xs"
         sl = await _open_picker(a, pilot)
         assert sl.selected == ["iq2_xs"]

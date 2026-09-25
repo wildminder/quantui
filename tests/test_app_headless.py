@@ -17,6 +17,7 @@ import threading
 import time
 
 import pytest
+from conftest import wait_mounted
 from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet, RichLog, Select
 
 from quantui import app as appmod
@@ -254,6 +255,7 @@ async def test_auto_suggest_comfy(tmp_path):
 async def test_gguf_regression(fake_popen, tmp_path):
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#model")
         a.query_one("#model", Input).value = str(tmp_path)
         a.query_one("#output", Input).value = str(tmp_path / "out")
         a.query_one("#pybin", Input).value = sys.executable
@@ -277,6 +279,7 @@ async def test_gguf_regression(fake_popen, tmp_path):
 async def test_comfy_run_builds_cmd_and_streams(fake_popen, tmp_path):
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#ctq_input")
         switch_family(a, Family.COMFY)
         m = tmp_path / "model.safetensors"
         m.write_text("x")

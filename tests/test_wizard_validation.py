@@ -1,5 +1,6 @@
 """Headless tests for S3.2 inline blur validation."""
 
+from conftest import wait_mounted
 from textual.widgets import Input, Label
 
 from quantui import app as appmod
@@ -9,6 +10,7 @@ async def test_blur_empty_model_shows_hint():
     """Focus + blur an empty #model -> hint label visible + -invalid class."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#model")
         model = a.query_one("#model", Input)
         model.focus()
         await pilot.pause()
@@ -26,6 +28,7 @@ async def test_valid_input_clears_hint():
     """Blur with content -> no -invalid class; re-blur after filling clears hint."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#model")
         model = a.query_one("#model", Input)
         # First blur empty -> invalid state on.
         model.focus()
@@ -49,6 +52,7 @@ async def test_non_required_field_ignored():
     """Blurring #custom (not in REQUIRED_FIELDS) never sets -invalid."""
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await wait_mounted(a, pilot, "#custom")
         custom = a.query_one("#custom", Input)
         custom.focus()
         await pilot.pause()
