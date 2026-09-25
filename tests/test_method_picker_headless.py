@@ -20,6 +20,22 @@ def _picker(app) -> SelectionList:
     return app.screen.query_one("#mp_list", SelectionList)
 
 
+async def _wait_mounted(app, pilot, selector: str) -> None:
+    """Poll until ``selector`` exists on the current screen.
+
+    Panel widgets are created during compose, and a single pilot.pause() is not
+    reliably enough on a loaded or slow runner (observed failing the GitHub
+    Actions gate). Wait for the widget instead of racing its mount.
+    """
+    for _ in range(20):
+        await pilot.pause()
+        try:
+            app.screen.query_one(selector)
+            return
+        except Exception:
+            continue
+
+
 def _prompt_plain(option) -> str:
     """The option prompt as literal text (Content.plain strips markup)."""
     prompt = option.prompt
@@ -29,6 +45,7 @@ def _prompt_plain(option) -> str:
 async def test_pick_method_button_present_and_opens_picker():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         btn = a.query_one("#pick_method", Button)
         btn.press()
         await pilot.pause()
@@ -38,6 +55,7 @@ async def test_pick_method_button_present_and_opens_picker():
 async def test_picker_lists_all_35_methods_in_registry_order():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#pick_method", Button).press()
         for _ in range(20):  # wait for the modal body to compose
             await pilot.pause()
@@ -58,6 +76,7 @@ async def test_picker_lists_all_35_methods_in_registry_order():
 async def test_current_method_preselected():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q5_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -75,6 +94,7 @@ async def test_multi_initial_value_preselected():
     # A comma list "q4_k_m, q5_k_m" preselects BOTH entries.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q5_k_m, q4_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -92,6 +112,7 @@ async def test_unknown_initial_ids_ignored():
     # Free-text typos in the initial value must not crash or preselect junk.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q9_typo, q5_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -108,6 +129,7 @@ async def test_unknown_initial_ids_ignored():
 async def test_confirm_single_selection_fills_method_input():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q4_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -131,6 +153,9 @@ async def test_confirm_single_selection_fills_method_input():
         # A comma list is not a single registry id, so the info line shows
         # the honest multi-method pass-through message (single-id picks get
         # the per-method description; covered in test_gguf_panel_headless).
+        # #custom lives in a Collapsible in the GGUF panel, so wait for the
+        # panel to be fully composed before reading the info line.
+        await _wait_mounted(a, pilot, "#custom")
         info = a.query_one("#method_info", Static)
         assert "Custom method" in str(info.render())
 
@@ -139,6 +164,7 @@ async def test_confirm_multiselect_registry_order():
     # Selecting in "reverse" order still dismisses in METHODS registry order.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q4_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -167,6 +193,7 @@ async def test_confirm_multiselect_registry_order():
 async def test_cancel_leaves_method_untouched():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "q4_k_m"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -184,6 +211,7 @@ async def test_cancel_leaves_method_untouched():
 async def test_escape_leaves_method_untouched():
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#method", Input).value = "iq2_xs"
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
@@ -203,6 +231,7 @@ async def test_imatrix_marker_visible_in_picker():
     # markup parser eats un-escaped uppercase tags, so the prompt is escaped.
     a = appmod.QuantApp()
     async with a.run_test() as pilot:
+        await _wait_mounted(a, pilot, "#pick_method")
         a.query_one("#pick_method", Button).press()
         for _ in range(20):
             await pilot.pause()
