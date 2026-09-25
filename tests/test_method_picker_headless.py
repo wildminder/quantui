@@ -149,6 +149,7 @@ async def test_confirm_single_selection_fills_method_input():
         registry_ids = [m.id for m in METHODS]
         selected = {"q4_k_m", "q8_0"}
         expected = ", ".join(mid for mid in registry_ids if mid in selected)
+        await _wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == expected
         # A comma list is not a single registry id, so the info line shows
         # the honest multi-method pass-through message (single-id picks get
@@ -187,6 +188,7 @@ async def test_confirm_multiselect_registry_order():
         registry_ids = [m.id for m in METHODS]
         selected = {"q4_k_m", "q5_k_m", "q8_0"}
         expected = ", ".join(mid for mid in registry_ids if mid in selected)
+        await _wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == expected
 
 
@@ -205,6 +207,7 @@ async def test_cancel_leaves_method_untouched():
                 continue
         a.screen.query_one("#mp_cancel", Button).press()
         await pilot.pause()
+        await _wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == "q4_k_m"
 
 
@@ -223,6 +226,7 @@ async def test_escape_leaves_method_untouched():
                 continue
         await pilot.press("escape")
         await pilot.pause()
+        await _wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == "iq2_xs"
 
 

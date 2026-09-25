@@ -48,6 +48,7 @@ async def test_empty_field_confirm_nothing_keeps_empty():
         assert sl.selected == []
         a.screen.query_one("#mp_confirm", Button).press()
         await pilot.pause()
+        await wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == ""
 
 
@@ -63,6 +64,7 @@ async def test_typo_in_field_preselects_nothing():
         # Cancelling leaves the typo in place (field untouched by the modal).
         a.screen.query_one("#mp_cancel", Button).press()
         await pilot.pause()
+        await wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == "q4_km,"
 
 
@@ -76,6 +78,7 @@ async def test_iq_star_preselected_roundtrips():
         assert sl.selected == ["iq2_xs"]
         a.screen.query_one("#mp_confirm", Button).press()
         await pilot.pause()
+        await wait_mounted(a, pilot, "#method")
         assert a.query_one("#method", Input).value == "iq2_xs"
 
 
