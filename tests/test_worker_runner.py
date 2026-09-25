@@ -129,6 +129,67 @@ def test_injects_unbuffered_flag():
                for s in observer.segments)
 
 
+def test_format_command_for_log_leaves_ordinary_command_unchanged():
+    cmd = ["python", "-m", "quantui.worker", "--method", "q4_k_m"]
+
+    assert worker_runner.format_command_for_log(cmd) == " ".join(cmd)
+
+
+def test_format_command_for_log_masks_hf_token_forms_only():
+    cmd = [
+        "python",
+        "--tokenizer-mode",
+        "token",
+        "--hf-token",
+        "hf_secret_one",
+        "--token-type",
+        "write",
+        "--hf-token=hf_secret_two",
+        "--other-token=keep-me",
+    ]
+
+    formatted = worker_runner.format_command_for_log(cmd)
+
+    assert "hf_secret_one" not in formatted
+    assert "hf_secret_two" not in formatted
+    assert "--hf-token ********" in formatted
+    assert "--hf-token=********" in formatted
+    assert "--tokenizer-mode token" in formatted
+    assert "--token-type write" in formatted
+    assert "--other-token=keep-me" in formatted
+
+
+def test_run_redacts_display_but_popen_receives_original_hf_token():
+    token = "hf_original_secret"
+    captured: dict = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        captured["kwargs"] = kwargs
+        return _PipeProc(b"=== finished ===\n")
+
+    observer = _CollectingObserver()
+    runner = worker_runner.WorkerRunner(popen=fake_popen)
+    rc = runner.run(
+        ["python", "worker.py", "--hf-token", token, "--other-token=visible"],
+        ".",
+        observer=observer,
+    )
+
+    assert rc == 0
+    assert captured["cmd"] == [
+        "python",
+        "-u",
+        "worker.py",
+        "--hf-token",
+        token,
+        "--other-token=visible",
+    ]
+    logged = "\n".join(segment.content for segment in observer.segments)
+    assert token not in logged
+    assert "$ python -u worker.py --hf-token ******** --other-token=visible" in logged
+
+
 def test_run_passes_thread_env(monkeypatch):
     # CPU-utilization fix: the worker subprocess must receive OMP/MKL/OPENBLAS
     # thread-pool env vars (full logical core count) unless the user set them.

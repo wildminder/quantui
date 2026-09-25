@@ -1,0 +1,102 @@
+name: CI
+
+# QuantUI quality gates, mirroring the local gates documented in CONTRIBUTING.md:
+#   * ruff      -> zero-tolerance lint over quantui/ and tests/
+#   * mypy      -> the five typing-clean core modules
+#   * pytest    -> the headless suite (no torch, no worker interpreters)
+#   * packaging -> wheel build + console entry-point resolution
+#
+# The gates run as DIRECT commands on purpose. The local shell gates
+# (scripts/precommit_ruff.sh, scripts/gate_tests.sh) read a frozen baseline from
+# the gitignored `docs/` tree, which does not exist in a fresh clone, so CI must
+# never call them. The two torch-dependent suites
+# (tests/test_stream_quant.py, tests/test_incremental_safetensors.py) are
+# excluded from the CI pytest run: CI has no torch, and the headless gate
+# excludes them by design. Run them locally with scripts/gate_torch.sh in a
+# torch-enabled quantization environment.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+# Least privilege: this workflow only ever reads the repository.
+permissions:
+  contents: read
+
+# A newer push to the same ref makes the previous run obsolete.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: Lint, types, headless tests, packaging
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Git Bash is preinstalled on windows-latest and gives the same
+        # multi-line, fail-fast semantics as the local gate scripts.
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          # Only the files this job actually resolves dependencies from.
+          # requirements-ctq.txt is deliberately absent: it describes the
+          # SEPARATE ComfyUI / convert_to_quant worker interpreter, which CI
+          # never installs, so hashing it would only invalidate the cache.
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+
+      - name: Install package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # textual is pinned to 8.2.8, the audited-good release the headless
+          # TUI suite was validated against: a floating textual>=0.78.0 would
+          # silently change what the gate proves.
+          python -m pip install -e ".[dev]" "textual==8.2.8"
+
+      - name: Ruff lint (zero tolerance)
+        run: python -m ruff check quantui/ tests/
+
+      - name: Mypy type check (core modules)
+        run: |
+          python -m mypy \
+            quantui/quant_methods.py \
+            quantui/stream_parser.py \
+            quantui/live_progress.py \
+            quantui/run_config.py \
+            quantui/profiles_store.py
+
+      - name: Headless test suite
+        run: |
+          python -m pytest tests/ -q \
+            --ignore=tests/test_incremental_safetensors.py \
+            --ignore=tests/test_stream_quant.py
+
+      - name: Packaging smoke (wheel build and console entry point)
+        run: |
+          # Build the distribution from a clean tree.
+          python -m pip wheel . --no-deps -w dist
+          # Resolve the console script `quantui = quantui.__main__:main` in the
+          # environment that was just installed. Existence-only check via the
+          # repo's own helper (it looks for bin/<name> and Scripts/<name>.exe):
+          # launching the Textual app here could hang on --help.
+          python scripts/packaging_smoke.py \
+            "$(python -c 'import sys; print(sys.prefix)')" \
+            quantui

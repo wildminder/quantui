@@ -20,8 +20,27 @@ Threading / byte-path preserved EXACTLY from the pre-refactor ``app._run_proc`` 
 import os
 import subprocess
 import threading
+from collections.abc import Sequence
 
 from .stream_parser import ProgressClassifier, StreamSegment, split_frames
+
+
+def format_command_for_log(cmd: Sequence[str]) -> str:
+    """Format a worker command for display without exposing its HF token."""
+    display: list[str] = []
+    redact_next = False
+    for arg in cmd:
+        if redact_next:
+            display.append("********")
+            redact_next = False
+        elif arg == "--hf-token":
+            display.append(arg)
+            redact_next = True
+        elif arg.startswith("--hf-token="):
+            display.append("--hf-token=********")
+        else:
+            display.append(arg)
+    return " ".join(display)
 
 
 # Thread-pool env defaults for the worker subprocess. Torch/OMP default to the
@@ -67,10 +86,12 @@ class WorkerRunner:
         # Echo the launched command as a VISIBLE line -- reproduces the old
         # `log_msg("$ <cmd>")`: it clears an (empty) live-progress bar (benign) and
         # is written to the run log + RichLog so the user sees what was launched.
+        # Redact secrets for display only; Popen below receives the original argv.
+        display_cmd = f"$ {format_command_for_log(cmd)}"
         observer.on_segment(
             StreamSegment(
-                f"$ {' '.join(cmd)}",
-                ProgressClassifier.classify(f"$ {' '.join(cmd)}"),
+                display_cmd,
+                ProgressClassifier.classify(display_cmd),
                 False,
             )
         )

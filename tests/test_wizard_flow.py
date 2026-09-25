@@ -143,6 +143,14 @@ async def test_wizard_default_method_is_q4_k_m():
             except Exception:
                 continue
         a.screen.query_one("#wiz_next").press()
-        await pilot.pause()
-        assert str(a.screen.query_one("#wiz_method", Select).value) == DEFAULT_GGUF_METHOD
+        # The step-1 body populates the method Select, which can land a beat
+        # after the press on a slow runner -- poll until it leaves Select.NULL
+        # rather than asserting on a single pause.
+        value = Select.NULL
+        for _ in range(20):
+            await pilot.pause()
+            value = a.screen.query_one("#wiz_method", Select).value
+            if str(value) != str(Select.NULL):
+                break
+        assert str(value) == DEFAULT_GGUF_METHOD
         assert DEFAULT_GGUF_METHOD == "q4_k_m"
