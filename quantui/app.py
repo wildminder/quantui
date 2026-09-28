@@ -2,8 +2,12 @@
 
 Supports two families (see ``quant_methods.Family``), each with its own worker:
 
-* **Unsloth GGUF** (causal-LM LLMs)  -> ``worker.py``   (output = folder)
-* **ComfyUI / convert_to_quant**      -> ``worker_ctq.py`` (output = .safetensors)
+The two families are distinguished by the artifact they produce, not by who
+ships the quantizer. The GGUF family also contains the app's own numpy-only
+exporter (``Backend.NATIVE``), which has nothing to do with Unsloth.
+
+* **GGUF** (llama.cpp, causal-LM LLMs) -> ``worker.py``   (output = .gguf)
+* **Safetensors** (diffusion)          -> ``worker_ctq.py`` (output = .safetensors)
 
 The GGUF happy path is intentionally byte-for-byte equivalent to the pre-M1 app:
 the GGUF widgets were extracted into ``build_gguf_panel()`` (a pure refactor, no
@@ -250,8 +254,8 @@ class QuantApp(
         # aggregate bar + stats line show the same pct/ETA with more detail;
         # the strip duplicated them during runs and showed "0% / --" at idle.
         yield RadioSet(
-            RadioButton("Unsloth GGUF", value=True, id="fam_gguf"),
-            RadioButton("ComfyUI / convert_to_quant", id="fam_comfy"),
+            RadioButton("GGUF (llama.cpp)", value=True, id="fam_gguf"),
+            RadioButton("Safetensors (diffusion)", id="fam_comfy"),
             id="family",
         )
         # Main layout delegated to panels.build_main_layout (S0.3 seam) -- all

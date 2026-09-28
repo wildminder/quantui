@@ -57,7 +57,7 @@ class WizardScreen(ModalScreen):
                 Input(self.values.get("model", ""), id="wiz_model"),
                 Label("Output path"),
                 Input(self.values.get("output", ""), id="wiz_output"),
-                Static("Family: gguf = Unsloth GGUF | comfy = ComfyUI convert_to_quant"),
+                Static("Family: gguf = GGUF (llama.cpp) | comfy = Safetensors (diffusion)"),
             )
         elif self.step == 1:
             title.update("Step 2/4 — Family & method")

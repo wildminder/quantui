@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Changed
+- **Family labels now describe the output, not the vendor.** The main
+  selector reads **GGUF (llama.cpp)** and **Safetensors (diffusion)** instead
+  of "Unsloth GGUF" and "ComfyUI / convert_to_quant". The old labels were
+  inaccurate: the GGUF family also contains the app's own numpy-only exporter
+  (`Backend.NATIVE`, 5 methods), which has nothing to do with Unsloth, and the
+  diffusion worker reads and writes plain `.safetensors` with no ComfyUI
+  runtime import, so its output is usable by any diffusers or ComfyUI install.
+  ComfyUI remains a useful hint for diffusion users, so it is kept in the
+  README and in the per-format rows that name the real backend.
+  Display labels only: the internal `Family.GGUF`/`Family.COMFY` values and
+  the `#fam_gguf`/`#fam_comfy` widget ids are unchanged, so existing saved
+  profiles keep working.
+- **README retitled to QuantUI.** It described the app as an "Unsloth GGUF
+  Quantizer", which understated it — the app targets both GGUF and diffusion
+  safetensors.
 - **App renamed to QuantUI.** The user-facing identity is now `quantui`
   everywhere: the run log is written as `quantui-<timestamp>.log` (was
   `unsloth-quant-tui-<timestamp>.log`), the manual log dump as

@@ -1,7 +1,14 @@
-# Unsloth GGUF Quantizer (TUI)
+# QuantUI
 
-A full-featured **terminal user interface** for converting HuggingFace / safetensors
-models to **GGUF** with **official Unsloth quantization methods**.
+A full-featured **terminal user interface** for quantizing models, with two
+output targets:
+
+- **GGUF** (llama.cpp) — 35 official Unsloth methods plus a built-in numpy-only
+  exporter that needs no torch, transformers or GPU.
+- **Safetensors** (diffusion) — FP8 / INT8 / NVFP4 / MXFP8 / W4A4 / W4A8 for
+  diffusion checkpoints, via `convert-to-quant` and `comfy-kitchen`. The output
+  is a plain `.safetensors` file; it is not locked to ComfyUI, though ComfyUI's
+  `comfy_quant` convention is what these formats target.
 
 You only need to provide three things:
 

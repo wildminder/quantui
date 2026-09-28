@@ -29,8 +29,10 @@ from typing import Any, Literal
 class Family(StrEnum):
     """Top-level quantization family. This is the single seam the TUI branches on."""
 
-    GGUF = "gguf"  # Unsloth GGUF (causal-LM LLMs)
-    COMFY = "comfy"  # ComfyUI / convert_to_quant (diffusion)
+    # The enum VALUES are persisted in saved profiles, so they are frozen: the
+    # display labels are "GGUF (llama.cpp)" and "Safetensors (diffusion)".
+    GGUF = "gguf"  # -> .gguf output (causal-LM LLMs)
+    COMFY = "comfy"  # -> .safetensors output (diffusion)
 
 
 class Backend(StrEnum):

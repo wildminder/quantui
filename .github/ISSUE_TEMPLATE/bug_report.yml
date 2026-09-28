@@ -74,7 +74,7 @@ body:
       options:
         - Native GGUF (in-process, no transformers)
         - Unsloth GGUF
-        - convert-to-quant (ComfyUI / ComfyUI quantization toolkit)
+        - convert-to-quant (diffusion / ComfyUI quantization toolkit)
         - ComfyUI kitchen (W4A4 / W4A8 / kitchen-era formats)
         - Not sure
     validations:
@@ -95,7 +95,7 @@ body:
         Numbered steps, starting from `quantui`. Include the worker interpreter
         path if the behavior depends on it.
       placeholder: |
-        1. Launch QuantUI with the Unsloth GGUF worker.
+        1. Launch QuantUI with the GGUF family selected.
         2. Select model path <model folder>.
         3. Choose method q4_k_m and start the run.
         4. Observe ...

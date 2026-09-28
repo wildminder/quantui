@@ -55,8 +55,8 @@ body:
       label: Which area does this affect?
       options:
         - TUI (screens, panels, progress, results)
-        - Unsloth GGUF worker
-        - convert-to-quant / ComfyUI worker
+        - GGUF worker (Unsloth / native)
+        - Safetensors worker (convert-to-quant / comfy-kitchen)
         - Profiles and run configuration
         - Packaging, installation, or startup
         - Documentation
