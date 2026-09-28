@@ -93,20 +93,27 @@ class LiveProgressStore:
             self._states[st.phase] = st
             return
         # 2) Third-party tqdm bar (convert_to_quant calibration/loading) -- parse the REAL
-        #    (cur, total, pct) into a determinate state that MERGES into the main
-        #    "quantize" slot, so the bar advances instead of freezing on raw text. This is
-        #    the complement to the worker's output-file-size polling (overall-length signal).
+        #    (cur, total, pct) into a determinate state so the bar advances instead of
+        #    freezing on raw text.
+        #
+        #    It gets its OWN slot, deliberately. These third-party bars are SUB-STEPS
+        #    (calibration, tensor loading), not the job itself: merging them into the
+        #    "quantize" slot made the bar hit 100% the moment calibration finished and
+        #    then jump back to a low percentage for the rest of the run, because the
+        #    worker's output-file-size poll and the calibration bar were overwriting
+        #    each other in one slot. Reported for fp8_e4m3; bf16/fp16 was unaffected
+        #    because casting uses a separate "cast" phase with a real per-shard counter.
         td = parse_tqdm_progress(s)
         if td is not None:
             st = ProgressState(
-                phase="quantize",
+                phase="calibrate",
                 cur=td["cur"],
                 total=td["total"],
                 pct=td["pct"],
                 label=td["label"] or "Quantizing",
                 rate=td.get("rate"),
             )
-            self._states["quantize"] = st
+            self._states["calibrate"] = st
             return
         # 3) Legacy text path (the ctq "(N/M) Processing" headers / unknown-total bars /
         #    any other progress line that carries no structured signal).

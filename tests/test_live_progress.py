@@ -78,15 +78,16 @@ def test_ctq_progress_envelope_structured_state():
     assert empty.render() == " "
 
 
-def test_tqdm_line_becomes_determinate_quantize_state():
-    # A third-party tqdm bar is parsed into a DETERMINATE "quantize" state (real cur/total)
+def test_tqdm_line_becomes_determinate_calibrate_state():
+    # A third-party tqdm bar is parsed into a DETERMINATE state (real cur/total)
     # instead of frozen raw text -- this is what makes the bar advance (Task #25).
+    # It gets its own "calibrate" slot; see the regression test below for why.
     store = LiveProgressStore()
     store.update("Optimizing INT8 (Prodigy-plateau):  50%|#####| 2000/4000 [00:01<?, ?it/s]")
     states = store.states()
     assert len(states) == 1
     st = states[0]
-    assert st.phase == "quantize"
+    assert st.phase == "calibrate"
     assert st.determinate is True
     assert st.cur == 2000 and st.total == 4000
     assert st.text == "Optimizing INT8 (Prodigy-plateau) [2000/4000]"
@@ -95,3 +96,17 @@ def test_tqdm_line_becomes_determinate_quantize_state():
     # so the two never collide.
     store.update("(1/211) Processing (INT8): a.weight")
     assert len(store) == 2, store.snapshot()
+
+
+def test_calibration_bar_does_not_overwrite_overall_quantize_progress():
+    # Regression: convert_to_quant's calibration tqdm is a SUB-STEP. While it shared
+    # the "quantize" slot with the worker's output-file-size poll, finishing
+    # calibration pinned the bar at 100% and the next real update knocked it back
+    # to a low percentage -- fp8 showed 100% at the start while quantization ran on.
+    store = LiveProgressStore()
+    store.update("Optimizing INT8 (Prodigy-plateau): 100%|##########| 4000/4000 [00:02<?, ?it/s]")
+    store.update('CTQ_PROGRESS {"phase": "quantize", "pct": 8.0, "label": "Writing quantized model"}')
+
+    by_phase = {s.phase: s for s in store.states()}
+    assert by_phase["calibrate"].pct == 100.0, "calibration keeps its own reading"
+    assert by_phase["quantize"].pct == 8.0, "overall progress must not be reset by calibration"

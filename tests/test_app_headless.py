@@ -606,7 +606,7 @@ async def test_log_msg_collapses_progress_lines(tmp_path, monkeypatch):
         states = a._live.states()
         assert len(states) == 1, states
         st = states[0]
-        assert st.phase == "quantize"
+        assert st.phase == "calibrate"
         assert st.determinate is True
         assert st.cur == 40 and st.total == 4000, (st.cur, st.total)
         value = next(iter(a._live.snapshot().values()))
@@ -632,7 +632,7 @@ async def test_log_msg_progress_cleared_on_real_line(tmp_path, monkeypatch):
         # The tqdm line is parsed into a REAL determinate state (cur/total), not raw text.
         states = a._live.states()
         assert len(states) == 1, states
-        assert states[0].phase == "quantize" and states[0].determinate is True
+        assert states[0].phase == "calibrate" and states[0].determinate is True
         assert states[0].cur == 0 and states[0].total == 4000
         value = next(iter(a._live.snapshot().values()))
         assert "Optimizing INT8 (x)" in value and "0/4000" in value, value

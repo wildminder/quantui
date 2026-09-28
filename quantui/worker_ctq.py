@@ -417,9 +417,9 @@ def _run_quantize_with_progress(quantize, kwargs, output_path, input_path, poll:
     The live bar tracks the OUTPUT ``.safetensors`` file GROWING against the expected
     output size -- a genuine file-based ("overall length") progress signal, NOT text
     scraping. It only emits % once the output file begins to grow, so it never clobbers
-    the calibration tqdm (which is tracked separately via ``parse_tqdm_progress`` on the
-    TUI side, keyed into the same "quantize" slot). Falls back to a direct call on any
-    error so progress instrumentation can never block the actual job.
+    the calibration tqdm (which the TUI tracks in its own "calibrate" slot via
+    ``parse_tqdm_progress``, so the two cannot overwrite each other). Falls back to a
+    direct call on any error so progress instrumentation can never block the actual job.
     """
     try:
         expected = _expected_output_bytes(input_path)

@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Fixed
+- **FP8/INT8 progress bar showed 100% while quantization was still running.**
+  convert_to_quant's calibration tqdm is a sub-step, but the TUI keyed it into the
+  same `quantize` slot as the worker's output-file-size poll. Finishing
+  calibration pinned the bar at 100%, and the next real update dropped it back to
+  a low percentage for the rest of the run. The two signals now occupy separate
+  slots (`calibrate` and `quantize`), so the overall bar climbs monotonically and
+  calibration reports independently. bf16/fp16 casting was unaffected: it uses a
+  `cast` phase with a real per-shard counter and never shared the slot.
+
 ### Changed
 - **Family labels now describe the output, not the vendor.** The main
   selector reads **GGUF (llama.cpp)** and **Safetensors (diffusion)** instead
