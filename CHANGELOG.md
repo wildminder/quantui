@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- **App renamed to QuantUI.** The user-facing identity is now `quantui`
+  everywhere: the run log is written as `quantui-<timestamp>.log` (was
+  `unsloth-quant-tui-<timestamp>.log`), the manual log dump as
+  `quantui-log-<timestamp>.txt` (was `unsloth-quant-tui-log-*.txt`), and the
+  generated pre-commit hook identifies itself as the `quantui` gate hook.
+  Anyone matching the old log filenames in a script must update the pattern.
+- The PyPI **distribution** name is still `unsloth-quant-tui`. `quantui` is
+  already taken on PyPI by an unrelated project (The-Schultz-Lab/QuantUI), so
+  it will be renamed before the first PyPI release. This affects only
+  `pip install <name>`; the console script, the `quantui` module, the GitHub
+  repository and the installed import package are already `quantui`.
+
 ## [0.10.5] - 2026-09-09
 
 ### Fixed

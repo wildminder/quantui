@@ -3,13 +3,18 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
+# Distribution name. Deliberately NOT "quantui": that name is already taken on
+# PyPI by an unrelated project (The-Schultz-Lab/QuantUI, a DFT frontend), so
+# claiming it would make this package unpublishable. The app, repo, console
+# script and user-facing identity are all "quantui" regardless. Revisit before
+# the first PyPI release and pick a free name.
 name = "unsloth-quant-tui"
 version = "0.10.5"
-description = "Terminal UI for multi-family model quantization (Unsloth GGUF + ComfyUI convert_to_quant)."
+description = "QuantUI — terminal UI for multi-family model quantization (Unsloth GGUF + ComfyUI convert_to_quant)."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "unsloth-quant-tui contributors" }]
+authors = [{ name = "QuantUI contributors" }]
 dependencies = [
     "textual>=0.78.0",
 ]

@@ -714,9 +714,9 @@ async def test_copy_and_save_clipboard_and_file(tmp_path, monkeypatch):
 
         # Save: dump full log to a temp file (appends a "Log dumped to ..." note).
         a.save_log()
-        pattern = os.path.join(tempfile.gettempdir(), "unsloth-quant-tui-log-*.txt")
+        pattern = os.path.join(tempfile.gettempdir(), "quantui-log-*.txt")
         matches = sorted(glob.glob(pattern), key=os.path.getmtime)
-        assert matches, "save_log did not create an unsloth-quant-tui-log-*.txt file"
+        assert matches, "save_log did not create a quantui-log-*.txt file"
         newest = matches[-1]
         try:
             with open(newest, encoding="utf-8") as fh:

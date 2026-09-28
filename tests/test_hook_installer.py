@@ -26,7 +26,7 @@ SCRIPTS = os.path.join(REPO_ROOT, "scripts")
 INSTALLER = os.path.join(SCRIPTS, "install_hooks.sh")
 GATE_TESTS = os.path.join(SCRIPTS, "gate_tests.sh")
 PRECOMMIT_RUFF = os.path.join(SCRIPTS, "precommit_ruff.sh")
-MARKER = "# unsloth-quant-tui gate hook"
+MARKER = "# quantui gate hook"
 
 bash = shutil.which("bash")
 pytestmark = pytest.mark.skipif(bash is None, reason="bash not available")

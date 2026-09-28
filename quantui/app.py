@@ -474,7 +474,7 @@ class QuantApp(
             self.notify("Log is empty.")
             return
         ts = time.strftime("%Y%m%d-%H%M%S")
-        path = os.path.join(tempfile.gettempdir(), f"unsloth-quant-tui-log-{ts}.txt")
+        path = os.path.join(tempfile.gettempdir(), f"quantui-log-{ts}.txt")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
         self.log_msg(f"Log dumped to {path}")
@@ -778,7 +778,7 @@ class QuantApp(
             self._debug_swallow(exc, "on_unmount.close_debug_fh")
 
     def _open_run_log(self) -> None:
-        """Open <tempdir>/unsloth-quant-tui-<ts>.log for this run (authoritative full log).
+        """Open <tempdir>/quantui-<ts>.log for this run (authoritative full log).
 
         Honors ``UNSLOTH_CTQ_LOG_DIR`` to redirect the run log (useful for CI capture
         / debug). The file is the single source of truth for the FULL log; ``RichLog``
@@ -786,7 +786,7 @@ class QuantApp(
         """
         ts = time.strftime("%Y%m%d-%H%M%S")
         logdir = os.environ.get("UNSLOTH_CTQ_LOG_DIR") or tempfile.gettempdir()
-        self._run_log_path = os.path.join(logdir, f"unsloth-quant-tui-{ts}.log")
+        self._run_log_path = os.path.join(logdir, f"quantui-{ts}.log")
         self._run_log_fh = open(self._run_log_path, "a", encoding="utf-8", buffering=1)
         # Optional diagnostic: capture the EXACT bytes / verdict each frame receives so
         # a user can paste back the real third-party library output if the bar still
